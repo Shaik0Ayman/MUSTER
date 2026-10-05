@@ -1,0 +1,11 @@
+# What I have on my bench. IDs are mine; types must exist in the board DB.
+boards:
+  - id: esp32_a
+    type: esp32-s3-devkitc-1
+    port: /dev/ttyUSB0
+  - id: esp32_b
+    type: esp32-s3-devkitc-1
+    port: /dev/ttyUSB1
+  - id: nano
+    type: nanoatmega328
+    port: /dev/ttyUSB2

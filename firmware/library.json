@@ -1,0 +1,12 @@
+{
+  "name": "muster",
+  "version": "0.1.0",
+  "description": "A framework for multi-MCU embedded systems: share tasks across heterogeneous boards over CAN and SPI.",
+  "keywords": ["can", "spi", "distributed", "multi-mcu", "esp32", "avr"],
+  "authors": [{ "name": "Shaik Ayman Hameed Baig" }, { "name": "Lahari" }],
+  "frameworks": ["arduino", "espidf"],
+  "platforms": "*",
+  "headers": "muster.h",
+  "build": { "srcDir": "src", "includeDir": "src" },
+  "export": { "exclude": ["test", "examples/*/.pio"] }
+}

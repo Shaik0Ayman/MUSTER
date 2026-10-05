@@ -1,0 +1,12 @@
+.pio/
+.vscode/
+__pycache__/
+*.egg-info/
+muster_out/
+firmware/test/test_*
+!firmware/test/test_*.c
+firmware/test/*.out
+firmware/test/*.elf
+firmware/test/*.su
+CLAUDE.local.md
+CLAUDE.md
