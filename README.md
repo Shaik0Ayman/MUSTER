@@ -29,10 +29,4 @@ muster plan tools/muster-cli/examples/quadruped/boards.yaml \
 muster build                                # compile it for every board
 ```
 
-## Building with Claude Code
-`CLAUDE.md` (root) plus the scoped `firmware/CLAUDE.md` and
-`tools/muster-cli/CLAUDE.md` give Claude Code the project's rules and context
-automatically. Start with `docs/CLAUDE_CODE_PROMPTS.md`.
-Docs: https://docs.claude.com/en/docs/claude-code/overview
 
-Team: Shaik Ayman Hameed Baig, Lahari — SRMIST, ECE.
