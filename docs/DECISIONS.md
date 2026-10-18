@@ -25,7 +25,7 @@ Short records of choices that are easy to second-guess. Add new ones at the bott
     transfer cost) would always win.
 11. **Hub and spoke.** Worker-originated calls and all results go via the lead. Costs
     a hop, buys full visibility for telemetry and a simpler worker.
-12. **The LLM proposes, the validator disposes.** Qwen3.5-9B (local, Ollama,
+12. *(Superseded by 21.)* **The LLM proposes, the validator disposes.** Qwen3.5-9B (local, Ollama,
     JSON-schema constrained) suggests the split; a deterministic validator is final.
     A deterministic baseline partitioner is the yardstick the LLM must beat.
 13. **Pins only from the curated DB.** The LLM never chooses pins; a hallucinated
@@ -47,3 +47,19 @@ Short records of choices that are easy to second-guess. Add new ones at the bott
 19. **Lead asks unknown senders to rejoin** (`ACK ok=2`). Without it a restarted
     lead, or a node written off while it could still hear the lead, never came back.
 20. **Protocol v2** for the above; frame and message layouts are unchanged.
+21. **An assistant over MCP replaces the local model.** Partitioning is judgement over
+    a handful of facts; an assistant that can also read the code, explain trade-offs
+    and edit the sketch does it better than a constrained 9B model, and needs no GPU.
+    The toolchain stays deterministic: the assistant only proposes plans, the
+    validator still decides, generation re-validates, and deploy needs `confirm`.
+    The baseline stays as the no-assistant path and the yardstick.
+22. **MCP server hand-written on stdio, standard library only.** A tools-only server
+    needs four methods; the SDK would have added pydantic, starlette, uvicorn, httpx.
+23. **libclang for analysis, without a board SDK.** Stand-in headers for Arduino and
+    libc, empty stubs for any other include. Only task signatures need real types,
+    and those must be defined in the sketch; the type check reads the typedef name the
+    user wrote (`int16_t` passes, `int` fails), not the host's sizes.
+24. **Generated glue is included into the sketch, after the last task.** The
+    trampolines need the user's structs and functions, and the user's code needs the
+    typed call stubs; one header included at that point gives both without asking the
+    user to move types into headers.

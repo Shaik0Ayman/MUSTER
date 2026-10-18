@@ -1,102 +1,354 @@
-"""Static analysis of the user's single main program.
+"""Static analysis of the user's single main program, with libclang.
 
-Prototype implementation: a brace-aware scanner, good enough for annotated
-Arduino-style sketches. The production version swaps this for libclang, which
-resolves macros, aliasing and includes properly. The output contract (the
-dicts returned below) stays the same, so nothing downstream changes.
+What it extracts is FACT, not judgement (the validator judges):
+  - every function marked MUSTER_TASK(...), its declared needs/cost/ram
+  - each parameter and the return value as a wire-type descriptor
+    (wiretypes.py), or the reason it cannot cross a board boundary
+  - which file-level variables each task touches (no shared memory across
+    boards), and static locals (state that differs per board)
 
-What it extracts is FACT, not judgement:
-  - every function marked MUSTER_TASK(...) and its declared needs
-  - whether a task takes pointer/reference parameters (unsafe to split)
-  - which file-level globals each task reads or writes (unsafe to split)
+The sketch is parsed as C++11 without any board SDK: muster_cli/shim holds
+stand-ins for the Arduino core and the C library, and any other header the
+sketch includes is replaced by an empty stub so a missing library never stops
+the parse. Only task signatures need real types, and those must be defined in
+the sketch itself.
+
+Output contract (consumed by validate, codegen, pio, the CLI and the MCP
+server). The keys from the first, regex-based analyser are kept unchanged:
+  tasks[]: name, return_type, params, pointer_params, globals_touched,
+           needs, cost, ram_kb
+  globals: [names]
+and extended with:
+  tasks[]: line, end_line, param_list [{name, spelling, type}], returns,
+           args_bytes, ret_bytes, errors [], warnings []
+  types:   {struct name: {"fields": [{name, type}], "size": bytes}}
+  diagnostics: [compiler errors outside what the analyser reports itself]
+  insert_line: last line of the last task (generated code goes after it)
+  has_gen_include: the sketch already #includes "muster_gen.h"
 """
 import re
+import tempfile
+from pathlib import Path
 
-TASK_RE = re.compile(
-    r"MUSTER_TASK\s*\(([^)]*)\)\s*"            # annotation arguments
-    r"([\w:<>\s\*&]+?)\s+(\w+)\s*\(([^)]*)\)\s*\{"  # return type, name, params
-)
-IDENT_RE = re.compile(r"\b[A-Za-z_]\w*\b")
-KEYWORDS = {
-    "if", "else", "for", "while", "return", "switch", "case", "break",
-    "continue", "sizeof", "do", "struct", "const", "static", "volatile",
+import clang.cindex as ci
+
+from . import wiretypes as wt
+
+SHIM = Path(__file__).parent / "shim"
+KNOWN_NEEDS = {"fpu", "wifi", "ble"}
+CK, TK = ci.CursorKind, ci.TypeKind
+
+INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]', re.M)
+BUILTIN_NAMES = {
+    TK.INT: "int", TK.UINT: "unsigned int", TK.SHORT: "short", TK.USHORT: "unsigned short",
+    TK.LONG: "long", TK.ULONG: "unsigned long", TK.LONGLONG: "long long",
+    TK.ULONGLONG: "unsigned long long", TK.CHAR_S: "char", TK.CHAR_U: "char",
+    TK.SCHAR: "signed char", TK.UCHAR: "unsigned char", TK.DOUBLE: "double",
+    TK.LONGDOUBLE: "long double", TK.WCHAR: "wchar_t",
 }
 
 
-def _strip_comments(src):
-    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
-    return re.sub(r"//[^\n]*", "", src)
+class AnalysisError(Exception):
+    """The source could not be parsed at all."""
 
 
-def _match_brace(src, open_idx):
-    depth = 0
-    for i in range(open_idx, len(src)):
-        if src[i] == "{":
-            depth += 1
-        elif src[i] == "}":
-            depth -= 1
-            if depth == 0:
-                return i
-    raise ValueError("unbalanced braces in source")
-
-
-def _top_level_globals(src):
-    """Variable declarations at brace depth 0 that are not functions."""
-    names, depth, line = set(), 0, ""
-    for ch in src:
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            line = ""
+# ------------------------------------------------------------- parsing
+def _stub_missing_headers(text, search_dirs, stub_dir):
+    """Write an empty header for every include we cannot find, so clang does
+    not stop at 'file not found'. Returns the names that were stubbed."""
+    stubbed = []
+    for name in INCLUDE_RE.findall(text):
+        if any((Path(d) / name).is_file() for d in search_dirs):
             continue
-        if depth != 0:
-            continue
-        if ch in ";\n":
-            stmt = line.strip()
-            line = ""
-            if (not stmt or stmt.startswith("#") or "(" in stmt
-                    or stmt.startswith(("typedef", "using", "struct", "MUSTER"))):
-                continue
-            stmt = stmt.split("=")[0].split("[")[0].strip()
-            parts = stmt.replace("*", " ").split()
-            if len(parts) >= 2:
-                names.add(parts[-1])
-        else:
-            line += ch
-    return names
+        target = Path(stub_dir) / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("#pragma once\n")
+        stubbed.append(name)
+    return stubbed
 
 
-def _parse_args(arg_text):
+def _parse(text, filename, include_dirs):
+    tmp = tempfile.TemporaryDirectory()
+    stub_dir = Path(tmp.name)
+    src_dir = Path(filename).resolve().parent
+    search = [SHIM, src_dir, *include_dirs]
+    stubbed = _stub_missing_headers(text, search, stub_dir)
+    args = ["-x", "c++", "-std=c++11", "--target=x86_64-unknown-linux-gnu",
+            "-nostdinc", "-nostdinc++", "-isystem", str(SHIM), "-isystem", str(stub_dir),
+            "-I", str(src_dir), "-include", str(SHIM / "muster_analysis.h")]
+    for d in include_dirs:
+        args += ["-I", str(d)]
+    path = str(Path(filename).resolve())
+    try:
+        tu = ci.Index.create().parse(path, args=args, unsaved_files=[(path, text)],
+                                     options=ci.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+    except ci.TranslationUnitLoadError as e:
+        tmp.cleanup()
+        raise AnalysisError(f"libclang could not parse {filename}: {e}")
+    return tu, tmp, stubbed, path
+
+
+def _in_main(cursor, path):
+    f = cursor.location.file
+    return f is not None and Path(f.name).resolve() == Path(path)
+
+
+# ------------------------------------------------------------- types
+def _is_const(t):
+    if t.kind in (TK.CONSTANTARRAY, TK.INCOMPLETEARRAY):
+        return _is_const(t.element_type)
+    return t.is_const_qualified()
+
+
+class _Resolver:
+    """Turns clang types into wire descriptors, collecting struct definitions."""
+
+    def __init__(self):
+        self.types = {}
+
+    def resolve(self, t, where, errors, allow_array=False):
+        k = t.kind
+        if k == TK.ELABORATED:
+            return self.resolve(t.get_named_type(), where, errors, allow_array)
+        if k in (TK.POINTER, TK.LVALUEREFERENCE, TK.RVALUEREFERENCE, TK.MEMBERPOINTER,
+                 TK.INCOMPLETEARRAY, TK.VARIABLEARRAY, TK.DEPENDENTSIZEDARRAY):
+            what = "a reference" if "REFERENCE" in k.name else "a pointer"
+            errors.append(f"{where} is {what} ({t.spelling}); the other board cannot see "
+                          f"this board's memory. Pass the value itself.")
+            return None
+        if k == TK.TYPEDEF:
+            name = t.get_declaration().spelling
+            if name in wt.SCALARS:
+                return wt.scalar(name)
+            if name in wt.REPLACEMENTS:
+                errors.append(f"{where} is {name}; use {wt.REPLACEMENTS[name]}.")
+                return None
+            return self.resolve(t.get_declaration().underlying_typedef_type, where, errors,
+                                allow_array)
+        if k == TK.BOOL:
+            return wt.scalar("bool")
+        if k == TK.FLOAT:
+            return wt.scalar("float")
+        if k in BUILTIN_NAMES:
+            name = BUILTIN_NAMES[k]
+            errors.append(f"{where} is {name}; use {wt.REPLACEMENTS[name]}.")
+            return None
+        if k == TK.ENUM:
+            errors.append(f"{where} is an enum ({t.spelling}); its size differs between "
+                          f"compilers. Use uint8_t and named constants.")
+            return None
+        if k == TK.CONSTANTARRAY:
+            if not allow_array:
+                errors.append(f"{where} is an array ({t.spelling}); C passes arrays as "
+                              f"pointers. Wrap it in a struct.")
+                return None
+            of = self.resolve(t.element_type, where + "[]", errors, allow_array=True)
+            return {"kind": "array", "of": of, "count": t.element_count} if of else None
+        if k == TK.RECORD:
+            return self._record(t, where, errors)
+        if k == TK.VOID:
+            errors.append(f"{where} cannot be void")
+            return None
+        errors.append(f"{where} has type '{t.spelling}', which muster cannot resolve "
+                      f"(define it in this file, or check its header is found).")
+        return None
+
+    def _record(self, t, where, errors):
+        decl = t.get_declaration()
+        name = t.get_canonical().spelling.replace("struct ", "").replace("class ", "")
+        if decl.kind == CK.UNION_DECL:
+            errors.append(f"{where} is a union ({name}); use a struct.")
+            return None
+        if not re.fullmatch(r"[A-Za-z_]\w*(::[A-Za-z_]\w*)*", name):
+            errors.append(f"{where} is an unnamed struct; give it a name.")
+            return None
+        if name in self.types:
+            return {"kind": "struct", "name": name}
+        fields, ok = [], True
+        for c in decl.get_children():
+            if c.kind == CK.CXX_BASE_SPECIFIER:
+                errors.append(f"struct {name} has a base class; muster sends plain structs only.")
+                ok = False
+            elif c.kind == CK.CXX_METHOD and c.is_virtual_method():
+                errors.append(f"struct {name} has virtual methods; muster sends plain structs only.")
+                ok = False
+            elif c.kind == CK.FIELD_DECL:
+                if c.is_bitfield():
+                    errors.append(f"field {name}.{c.spelling} is a bit-field; use a whole uint8_t/uint16_t.")
+                    ok = False
+                    continue
+                d = self.resolve(c.type, f"field {name}.{c.spelling}", errors, allow_array=True)
+                if d is None:
+                    ok = False
+                else:
+                    fields.append({"name": c.spelling, "type": d})
+        if not ok:
+            return None
+        self.types[name] = {"fields": fields}
+        self.types[name]["size"] = wt.encoded_size({"kind": "struct", "name": name}, self.types)
+        return {"kind": "struct", "name": name}
+
+    def resolve_return(self, t, where, errors):
+        if t.kind == TK.VOID:
+            return {"kind": "void"}
+        return self.resolve(t, where, errors)
+
+
+# ------------------------------------------------------------- tasks
+def _parse_annotation(text, name, errors):
     out = {"needs": [], "cost": 100, "ram_kb": 1}
-    for part in [p.strip() for p in arg_text.split(",") if p.strip()]:
+    for part in [p.strip() for p in text.split(",") if p.strip()]:
         if "=" not in part:
+            errors.append(f"task '{name}': annotation item '{part}' is not key = value")
             continue
         key, val = [s.strip() for s in part.split("=", 1)]
         if key == "needs":
             out["needs"] = [v.strip().lower() for v in val.split("|") if v.strip()]
-        elif key == "cost":
-            out["cost"] = int(val)
-        elif key == "ram":
-            out["ram_kb"] = int(val)
+            unknown = set(out["needs"]) - KNOWN_NEEDS
+            if unknown:
+                errors.append(f"task '{name}': unknown need(s) {', '.join(sorted(unknown))}; "
+                              f"known: {', '.join(sorted(KNOWN_NEEDS))}")
+        elif key in ("cost", "ram"):
+            try:
+                v = int(val, 0)
+            except ValueError:
+                errors.append(f"task '{name}': {key} = {val} is not an integer")
+                continue
+            if key == "cost" and not 1 <= v <= 65535:
+                errors.append(f"task '{name}': cost must be 1..65535 (it is a uint16_t)")
+            elif key == "ram" and v < 0:
+                errors.append(f"task '{name}': ram must be >= 0")
+            out["cost" if key == "cost" else "ram_kb"] = v
+        else:
+            errors.append(f"task '{name}': unknown annotation key '{key}' "
+                          f"(known: needs, cost, ram)")
     return out
 
 
-def analyze(source_text):
-    src = _strip_comments(source_text)
-    globals_ = _top_level_globals(src)
-    tasks = []
-    for m in TASK_RE.finditer(src):
-        args, ret, name, params = m.groups()
-        body_open = m.end() - 1
-        body = src[body_open:_match_brace(src, body_open) + 1]
-        used = {t for t in IDENT_RE.findall(body) if t not in KEYWORDS}
+def _body_facts(fn):
+    """File-level variables the body touches, and static locals it declares."""
+    touched, statics = set(), set()
+
+    def walk(c):
+        if c.kind == CK.DECL_REF_EXPR:
+            ref = c.referenced
+            if (ref is not None and ref.kind == CK.VAR_DECL
+                    and ref.semantic_parent is not None
+                    and ref.semantic_parent.kind in (CK.TRANSLATION_UNIT, CK.NAMESPACE)
+                    and not _is_const(ref.type)):
+                touched.add(ref.spelling)
+        elif c.kind == CK.VAR_DECL and c.storage_class == ci.StorageClass.STATIC:
+            statics.add(c.spelling)
+        for ch in c.get_children():
+            walk(ch)
+
+    for ch in fn.get_children():
+        if ch.kind == CK.COMPOUND_STMT:
+            walk(ch)
+    return sorted(touched), sorted(statics)
+
+
+def _annotation(fn):
+    for c in fn.get_children():
+        if c.kind == CK.ANNOTATE_ATTR and c.spelling.startswith("muster:"):
+            return c.spelling[len("muster:"):]
+    return None
+
+
+def _walk_decls(cursor, path):
+    for c in cursor.get_children():
+        if not _in_main(c, path):
+            continue
+        if c.kind == CK.NAMESPACE:
+            yield from _walk_decls(c, path)
+        else:
+            yield c
+
+
+def analyze(source_text, filename="main.cpp", include_dirs=()):
+    tu, tmp, stubbed, path = _parse(source_text, filename, include_dirs)
+    try:
+        return _analyze_tu(tu, path, stubbed)
+    finally:
+        tmp.cleanup()
+
+
+def analyze_file(path, include_dirs=()):
+    p = Path(path)
+    return analyze(p.read_text(encoding="utf-8"), str(p), include_dirs)
+
+
+def _analyze_tu(tu, path, stubbed):
+    res = _Resolver()
+    tasks, globals_, names = [], set(), {}
+    insert_line, has_gen = 0, False
+
+    for inc in tu.get_includes():
+        if inc.depth == 1 and Path(inc.include.name).name == "muster_gen.h":
+            has_gen = True
+
+    for c in _walk_decls(tu.cursor, path):
+        if c.kind == CK.VAR_DECL and not _is_const(c.type):
+            globals_.add(c.spelling)
+        if c.kind not in (CK.FUNCTION_DECL, CK.CXX_METHOD) or not c.is_definition():
+            continue
+        ann = _annotation(c)
+        if ann is None:
+            continue
+        name = c.spelling
+        errors, warnings = [], []
+        if c.kind == CK.CXX_METHOD:
+            errors.append(f"task '{name}' is a member function; tasks must be free functions")
+        if name in names:
+            errors.append(f"task '{name}' is defined twice (overloads cannot be tasks)")
+        names[name] = True
+        meta = _parse_annotation(ann, name, errors)
+
+        params = []
+        for i, a in enumerate(c.get_arguments()):
+            pname = a.spelling or f"arg{i}"
+            d = res.resolve(a.type, f"task '{name}' parameter '{pname}'", errors)
+            params.append({"name": pname, "spelling": a.type.spelling, "type": d})
+        ret = res.resolve_return(c.result_type, f"task '{name}' return value", errors)
+        touched, statics = _body_facts(c)
+        if statics:
+            warnings.append(f"task '{name}' keeps static local(s) {', '.join(statics)}; each "
+                            f"board has its own copy, so results depend on where it ran")
+        typed = ret is not None and all(p["type"] for p in params)
         tasks.append({
             "name": name,
-            "return_type": ret.strip(),
-            "params": params.strip(),
-            "pointer_params": ("*" in params) or ("&" in params),
-            "globals_touched": sorted(used & globals_),
-            **_parse_args(args),
+            "return_type": c.result_type.spelling,
+            "params": ", ".join(f"{p['spelling']} {p['name']}" for p in params),
+            "pointer_params": any(a.type.kind in (TK.POINTER, TK.LVALUEREFERENCE,
+                                                  TK.RVALUEREFERENCE) for a in c.get_arguments()),
+            "globals_touched": touched,
+            **meta,
+            "line": c.extent.start.line,
+            "end_line": c.extent.end.line,
+            "param_list": params,
+            "returns": ret,
+            "args_bytes": sum(wt.encoded_size(p["type"], res.types) for p in params) if typed else None,
+            "ret_bytes": wt.encoded_size(ret, res.types) if typed else None,
+            "errors": errors,
+            "warnings": warnings,
         })
-    return {"tasks": tasks, "globals": sorted(globals_)}
+        insert_line = max(insert_line, c.extent.end.line)
+
+    diagnostics = []
+    for d in tu.diagnostics:
+        if d.severity < ci.Diagnostic.Error:
+            continue
+        if re.search(r"undeclared identifier 'muster_", d.spelling):
+            continue                        # generated call stubs, see codegen.py
+        line = d.location.line if d.location.file else 0
+        diagnostics.append(f"line {line}: {d.spelling}")
+
+    return {
+        "tasks": tasks,
+        "globals": sorted(globals_),
+        "types": res.types,
+        "diagnostics": diagnostics,
+        "stubbed_headers": stubbed,
+        "insert_line": insert_line,
+        "has_gen_include": has_gen,
+    }

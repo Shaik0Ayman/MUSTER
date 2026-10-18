@@ -1,12 +1,21 @@
 [project]
 name = "muster-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Split one embedded program across many microcontroller boards"
 requires-python = ">=3.9"
-dependencies = ["pyyaml", "requests", "wireviz>=0.4"]
+dependencies = ["pyyaml", "libclang>=16", "wireviz>=0.4"]
+
+[project.optional-dependencies]
+test = ["pytest"]
 
 [project.scripts]
 muster = "muster_cli.cli:main"
 
+[tool.setuptools]
+packages = ["muster_cli"]
+
 [tool.setuptools.package-data]
-muster_cli = ["db/*.yaml"]
+muster_cli = ["db/*.yaml", "shim/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

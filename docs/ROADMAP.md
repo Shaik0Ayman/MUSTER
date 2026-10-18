@@ -71,24 +71,37 @@ analyser capture). Update the checkboxes as you go.
 - [ ] Measured: SPI vs CAN latency and throughput.
 
 ## M6 — Typed trampoline generator (`tools/muster-cli`)
-- [ ] Replace the placeholder registry (`void(*)(void)` casts) with generated
+- [x] Replace the placeholder registry (`void(*)(void)` casts) with generated
       trampolines using `muster_put_*`/`muster_get_*`.
-- [ ] Supported types: `uint8/16/32_t`, `int8/16/32_t`, `float`, `bool`, and POD structs
+      *(`muster_gen.h`: struct encoders, trampolines, `muster_setup/loop`, and typed
+      call stubs `muster_<task>()` + `_async/_result`. Host round-trip test compiles it
+      with `-Werror` and calls every task through its stub.)*
+- [x] Supported types: `uint8/16/32_t`, `int8/16/32_t`, `float`, `bool`, and POD structs
       of those (recursive). Fixed-size arrays of those.
-- [ ] Validator **rejects** `int`, `long`, `unsigned`, `double`, `size_t`, pointers,
+- [x] Validator **rejects** `int`, `long`, `unsigned`, `double`, `size_t`, pointers,
       references, with a message naming the fixed-width replacement.
-- [ ] Generated project for the quadruped example compiles for all three envs with `pio run`.
-- [ ] Analyser moves to libclang (keep the output contract identical).
+      *(Also `short`, `char`, enums, unions, bit-fields, array parameters, structs with
+      bases/virtuals, and calls larger than the smallest board's message buffer.)*
+- [x] Generated project for the quadruped example compiles for all three envs with `pio run`.
+      *(2026-10-18: nano 698 B RAM / 11.4 KB flash; esp32_a and esp32_b SUCCESS, no
+      warnings from generated code. The example's `int sensor_read(int)` became
+      `int16_t sensor_read(uint8_t)` — the validator rejected the original.)*
+- [x] Analyser moves to libclang (keep the output contract identical).
+      *(Original keys kept; new keys added. Parses without a board SDK.)*
 
-## M7 — Local LLM evaluation
-- [ ] Run Qwen3.5-9B (Q4_K_M) via Ollama on 20+ test programs.
-- [ ] Compare against the baseline: first-attempt validation pass rate, repair
-      attempts, plan quality (single-board tasks, lead choice). Report a table.
+## M7 — ~~Local LLM evaluation~~ (superseded, DECISIONS 21)
+The local Qwen model was replaced by an assistant connected over MCP (M9). If an
+evaluation is wanted for the report: run the assistant over MCP on 20+ test
+programs and compare its plans with the baseline (validation pass rate on first
+attempt, fewer single-board tasks, lead choice).
 
 ## M8 — Telemetry and dashboard
 - [ ] Lead emits a binary event stream over USB serial (sequence-numbered, no printf).
 - [ ] Host decoder + live dashboard: per-board load, bus load, task placements, failures.
 
 ## M9 — MCP server
-- [ ] Expose `list_boards`, `analyze_source`, `validate_plan`, `generate_project`
+- [x] Expose `list_boards`, `analyze_source`, `validate_plan`, `generate_project`
       (re-validates internally), `render_wiring`, `deploy` (dry-run unless `confirm=true`).
+      *(Plus `baseline_plan` and `build_project`. `muster mcp`, stdio, protocol
+      2024-11-05 … 2025-06-18; tested in-process and over a real pipe. Registered for
+      Claude Code in `.mcp.json`; not yet exercised from a live client session.)*

@@ -34,6 +34,10 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq graphviz
-      - run: pip install -e tools/muster-cli
-      - name: Plan the quadruped example offline (baseline partitioner)
-        run: muster plan tools/muster-cli/examples/quadruped/boards.yaml tools/muster-cli/examples/quadruped/main.cpp --offline --out /tmp/muster_out
+      - run: pip install -e "tools/muster-cli[test]" platformio
+      - name: Toolchain tests (analyser, validator, codegen + host round trip, MCP, CLI)
+        run: pytest tools/muster-cli
+      - name: Plan the quadruped example (baseline partitioner)
+        run: muster plan tools/muster-cli/examples/quadruped/boards.yaml tools/muster-cli/examples/quadruped/main.cpp --out /tmp/muster_out
+      - name: Compile the generated project for every board
+        run: muster build --out /tmp/muster_out

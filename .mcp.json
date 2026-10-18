@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "muster": {
+      "command": "tools/muster-cli/.venv/Scripts/muster.exe",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

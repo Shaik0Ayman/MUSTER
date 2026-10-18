@@ -1,11 +1,10 @@
 """Wiring diagram generator.
 
-Every pin it draws comes from db/boards.yaml. The LLM is never consulted:
+Every pin it draws comes from db/boards.yaml. No model or assistant is consulted:
 a hallucinated pin here is not a bug, it is a burnt board.
 """
 from pathlib import Path
 import yaml
-from wireviz.wireviz import parse
 
 LOGIC_COLORS = ["YE", "GN", "BU", "OG", "VT", "WH", "RD", "BK"]
 
@@ -69,13 +68,28 @@ def build_wiring(inventory, db, out_dir, warnings=()):
     }
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "wiring.yaml").write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True))
-    parse(doc, output_formats=("svg", "png"), output_dir=out_dir, output_name="wiring")
+    (out_dir / "wiring.yaml").write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+                                         encoding="utf-8")
+    result = {"yaml": str(out_dir / "wiring.yaml"), "notes": str(out_dir / "WIRING_NOTES.txt"),
+              "svg": None, "rendered": False}
+    try:
+        from wireviz.wireviz import parse      # heavy import; only when drawing
+        parse(doc, output_formats=("svg", "png"), output_dir=out_dir, output_name="wiring")
+        result.update(svg=str(out_dir / "wiring.svg"), rendered=True)
+    except Exception as e:                     # usually Graphviz's `dot` is missing
+        (out_dir / "wiring.tmp").unlink(missing_ok=True)
+        result["skipped"] = (f"diagram not rendered ({type(e).__name__}: {e}); install "
+                             f"Graphviz, then run: wireviz {out_dir / 'wiring.yaml'}")
 
     notes = [
         "Use twisted pair for CANH/CANL; keep stubs from bus to each transceiver short.",
         "Fit exactly two 120 Ω terminators, one at each physical end of the bus.",
         "All boards must share a common ground.",
-    ] + list(warnings)
-    (out_dir / "WIRING_NOTES.txt").write_text("\n".join(f"- {n}" for n in notes) + "\n")
-    return out_dir / "wiring.svg"
+    ]
+    if any(not b["spec"]["can"]["native"] for b in inventory):
+        notes.append("MCP2515 modules: read the crystal (8 or 16 MHz) and set MUSTER_MCP_CLOCK "
+                     "to match; the generated build assumes 8 MHz.")
+    notes += list(warnings)
+    (out_dir / "WIRING_NOTES.txt").write_text("\n".join(f"- {n}" for n in notes) + "\n",
+                                              encoding="utf-8")
+    return result

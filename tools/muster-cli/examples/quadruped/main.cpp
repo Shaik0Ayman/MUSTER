@@ -1,4 +1,8 @@
 // One program for the whole robot. Muster splits it across the boards.
+//
+// Every board is flashed with this same file. `muster plan` adds the generated
+// glue (muster_gen.h) after the last task; it gives each task a twin,
+// muster_<task>(...), that runs it on whichever board the lead picks.
 #include <Arduino.h>
 
 struct Vec3 { float x, y, z; };
@@ -25,9 +29,28 @@ Vec3 imu_filter(Vec3 accel, Vec3 gyro) {
 }
 
 MUSTER_TASK(cost = 20, ram = 1)
-int sensor_read(int channel) {
-    return analogRead(channel);
+int16_t sensor_read(uint8_t channel) {
+    return (int16_t)analogRead(channel);
 }
 
-void setup() {}
-void loop() {}
+void setup() {
+    Serial.begin(115200);
+    if (muster_setup() != 0) Serial.println(F("CAN init failed"));
+}
+
+void loop() {
+    muster_loop();
+#if MUSTER_LEAD
+    // The lead runs the control loop; the work lands wherever it fits best.
+    static uint32_t last = 0;
+    if (millis() - last >= 200) {
+        last = millis();
+        Vec3 accel = {0.1f, 0.2f, 9.8f}, gyro = {1.0f, 2.0f, 3.0f}, att;
+        Gait g;
+        if (muster_imu_filter(accel, gyro, &att, 300) == MUSTER_OK &&
+            muster_gait_planner(0.5f, att.z * 0.01f, &g, 300) == MUSTER_OK) {
+            Serial.print(F("hip0 ")); Serial.println(g.hip[0], 3);
+        }
+    }
+#endif
+}

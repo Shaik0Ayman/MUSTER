@@ -3,6 +3,8 @@
 __pycache__/
 *.egg-info/
 muster_out/
+.venv/
+.pytest_cache/
 firmware/test/test_*
 !firmware/test/test_*.c
 firmware/test/*.out

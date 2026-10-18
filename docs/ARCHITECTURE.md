@@ -67,17 +67,22 @@ stack frames (estimate from `-fstack-usage`, not measured on the chip).
 ## Toolchain (`tools/muster-cli`)
 ```
 main.cpp + boards.yaml
-  → analyse   (tasks, needs, pointer params, globals touched — facts only)
-  → partition (Qwen3.5-9B via Ollama, JSON-schema constrained; or deterministic baseline)
-  → validate  (final authority: unsafe source, capabilities, RAM; LLM gets ≤3 repairs)
-  → generate  (platformio.ini per board, task IDs, residency registry, WireViz wiring)
+  → analyse   (libclang: tasks, wire types, encoded sizes, globals touched — facts only)
+  → partition (deterministic baseline, a plan file, or an assistant over MCP)
+  → validate  (final authority: non-portable types, globals, capabilities, RAM,
+               message size on the smallest board, node/task limits)
+  → generate  (muster_gen.h: struct encoders, trampolines, muster_setup/loop, typed
+               call stubs; platformio.ini per board; runtime headers; WireViz wiring)
+  → build     (pio run per board)
   → deploy    (pio upload per board, lead last)
 ```
-The generator must emit `muster_set_cost()` on the lead for every task the lead
-does not hold, or placement cannot account for work queued on workers.
+`muster mcp` exposes each step as an MCP tool, so an assistant (Claude Code or any
+MCP client) makes the partitioning judgement; `generate_project` re-validates and
+`deploy` is a dry run unless confirmed. The generated setup calls
+`muster_set_cost()` for every task on every board, so the lead can price tasks it
+does not hold.
 
 ## Planned
 - Hardware bring-up of the CAN and SPI drivers (M4, M5).
-- Typed trampoline generator in `muster-cli` (replaces the placeholder registry).
 - Telemetry stream from the lead + host dashboard.
-- MCP server exposing the toolchain to any MCP-capable assistant.
+- SPI accelerator links generated from the board DB.
