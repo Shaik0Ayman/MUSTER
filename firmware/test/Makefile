@@ -7,7 +7,7 @@ SRC      = ../src
 CFLAGS   = -std=c99 -Wall -Wextra -Wpedantic -Werror -O2 -I$(SRC)
 CXXFLAGS = -std=c++11 -Wall -Wextra -Werror -O2 -I$(SRC)
 HDRS     = $(wildcard $(SRC)/*.h) rig.h
-TESTS    = test_bus test_core test_framing test_loss test_multilink test_spi_frame test_spi_link
+TESTS    = test_bus test_core test_framing test_loss test_modules test_multilink test_spi_frame test_spi_link
 AVRFLAGS = -mmcu=atmega328p -std=c99 -Os -Wall -Wextra -Werror -I$(SRC) \
            -ffunction-sections -fdata-sections
 

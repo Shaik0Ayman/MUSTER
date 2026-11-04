@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* muster_link_twai.h - CAN link for ESP32 / ESP32-S3 using the on-chip TWAI
  * controller. Needs an external transceiver (SN65HVD230 at 3.3 V).
  *
@@ -47,6 +49,9 @@ static uint16_t mtwai_recv(muster_link *l, uint8_t *src, uint8_t *f, uint16_t ca
     return 0;
 }
 
+/* The core calls this if the node ID changes (muster_set_uid, ID clash). */
+static void mtwai_set_id(muster_link *l, uint8_t id) { l->ctx = (void *)(uintptr_t)id; }
+
 /* tx/rx: GPIOs to the transceiver, e.g. GPIO_NUM_5 / GPIO_NUM_4 */
 static int muster_twai_begin(muster_link *link, uint8_t node_id, int tx, int rx)
 {
@@ -59,6 +64,7 @@ static int muster_twai_begin(muster_link *link, uint8_t node_id, int tx, int rx)
     link->mtu = 8; link->kbps = 500;
     link->send = mtwai_send; link->recv = mtwai_recv;
     link->ctx = (void *)(uintptr_t)node_id;
+    link->set_id = mtwai_set_id;
     return 0;
 }
 #endif

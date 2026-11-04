@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* test_spi_link.c - ROADMAP M3: the SPI link's queues and master/slave
  * logic, then a two-board runtime over the in-memory SPI wire, then the same
  * with random bit flips. Lead = SPI master, worker = SPI slave, 4 MHz.

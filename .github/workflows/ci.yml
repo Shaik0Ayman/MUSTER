@@ -41,3 +41,16 @@ jobs:
         run: muster plan tools/muster-cli/examples/quadruped/boards.yaml tools/muster-cli/examples/quadruped/main.cpp --out /tmp/muster_out
       - name: Compile the generated project for every board
         run: muster build --out /tmp/muster_out
+      - name: Plan and compile the shared-image + modules example
+        run: |
+          muster plan tools/muster-cli/examples/quadruped_modules/boards.yaml tools/muster-cli/examples/quadruped_modules/main.cpp --out /tmp/muster_mod
+          muster build --out /tmp/muster_mod
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pyflakes
+      - name: Python lint (unused imports, undefined names)
+        run: pyflakes tools/muster-cli/muster_cli tools/muster-cli/tests

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* rig.h - shared scaffolding for the multi-board host tests.
  * Include after muster.h (with MUSTER_IMPLEMENTATION) in exactly one test.
  *

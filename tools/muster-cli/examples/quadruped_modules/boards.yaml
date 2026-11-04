@@ -1,0 +1,18 @@
+# Three identical ESP32-S3s and a Nano. `shared_images` makes the three ESP32s
+# ONE firmware image: each takes its node ID from its own chip at run time, and
+# the lead decides what each of them does (modules) as they connect or drop.
+# The lead is always node 0 and gets its own env; the Nano keeps a fixed ID.
+shared_images: true
+boards:
+  - id: esp32_a
+    type: esp32-s3-devkitc-1
+    port: /dev/ttyUSB0
+  - id: esp32_b
+    type: esp32-s3-devkitc-1
+    port: /dev/ttyUSB1
+  - id: esp32_c
+    type: esp32-s3-devkitc-1
+    port: /dev/ttyUSB2
+  - id: nano
+    type: nanoatmega328
+    port: /dev/ttyUSB3

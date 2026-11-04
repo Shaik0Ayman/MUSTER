@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* test_multilink.c - ROADMAP M2, the tests listed in docs/MULTILINK_SPEC.md.
  *   bus A: MTU 8,  500 kbps  - lead 0, worker 1, worker 2   ("CAN")
  *   bus B: MTU 64, 4000 kbps - lead 0, worker 1             ("SPI")

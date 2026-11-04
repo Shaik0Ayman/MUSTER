@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* Minimal Nano worker: what a real ATmega328P build would link. */
 #define MUSTER_IMPLEMENTATION
 #include "muster.h"
@@ -15,7 +17,7 @@ static int16_t sensor(const uint8_t *a, uint16_t len, uint8_t *ret, uint16_t cap
 }
 
 static muster_t M;
-static muster_link L = { 8, 500, tx, rx, 0 };
+static muster_link L = { 8, 500, tx, rx, 0, 0 };
 
 int main(void) {
     muster_begin(&M, 2, 0, 1, 2, 16, 0, &L, ms);

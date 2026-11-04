@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 The Muster contributors
 """muster - split one program across many boards.
 
   muster boards                           board types muster knows
@@ -74,6 +76,11 @@ def cmd_plan(args):
     print(f"\n      lead: {r['lead']}")
     for bid, held in r["placement"].items():
         print(f"      {bid:<10} holds {', '.join(held) or '(none)'}")
+    for name, boards in r.get("modules", {}).items():
+        print(f"      module {name}: may run on {', '.join(boards)}; the lead picks at run time")
+    shared = {env: ids for env, ids in r["project"]["images"].items() if len(ids) > 1}
+    for env, ids in shared.items():
+        print(f"      one image ({env}) for {', '.join(ids)}: node IDs come from the chip")
     print(f"\n      rationale: {plan.get('rationale', '-')}")
     print(f"      next: muster build --out {args.out}\n")
 

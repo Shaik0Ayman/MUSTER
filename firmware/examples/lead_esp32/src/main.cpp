@@ -20,8 +20,10 @@ static uint32_t ms(void) { return millis(); }
 
 static void on_event(uint8_t ev, uint8_t a, uint8_t b, void *) {
     static const char *names[] = {"?", "JOINED", "LOST", "PLACED", "DONE", "RETRY",
-                                  "ACCEPTED", "VERSION", "REFUSED"};
-    Serial.printf("[%lu] %s a=%u b=%u\n", (unsigned long)millis(), ev < 9 ? names[ev] : "?", a, b);
+                                  "ACCEPTED", "VERSION", "REFUSED", "MODULE_START", "MODULE_STOP",
+                                  "IDCLASH"};
+    const unsigned n = sizeof names / sizeof names[0];
+    Serial.printf("[%lu] %s a=%u b=%u\n", (unsigned long)millis(), ev < n ? names[ev] : "?", a, b);
 }
 
 void setup() {

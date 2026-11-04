@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* test_loss.c - ROADMAP M1 loss test: 5% of frame deliveries are dropped at
  * random (a receiver's buffer overflowing) on an 8-byte-MTU bus, and every
  * call must still complete with the right answer.

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* test_bus.c - three simulated boards on an 8-byte-MTU bus (classic CAN).
  *   node 0  lead    "ESP32-S3"  240 MHz, FPU, holds tasks 0,1,2
  *   node 1  worker  "ESP32-S3"  240 MHz, FPU, holds tasks 0,1,2

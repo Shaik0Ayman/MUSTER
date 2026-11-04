@@ -12,6 +12,7 @@ and a port can be "unplugged".
 | `test_core` | duplicate suppression, worker resends, slow tasks, liveness/rejoin, lead restart, hostile input, API edges |
 | `test_framing` | reassembly edge cases, link MTU checks, node table full/recycle, version check |
 | `test_loss` | 5% random frame loss, 300 calls (with `MUSTER_MAX_RETRIES=6`) |
+| `test_modules` | lead-assigned modules (placement, decline, loss, healed ASSIGN) and uid-based IDs with clash resolution |
 | `test_multilink` | CAN + SPI-like buses: routes, link-priced placement, unplug/replug, broadcasts |
 | `test_spi_frame` | SPI packet framing and CRC |
 | `test_spi_link` | SPI queues, master/slave logic, two boards over the in-memory wire, bit flips, cable pull |

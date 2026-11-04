@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* test_spi_frame.c - SPI packet framing and CRC (the portable half of the SPI link). */
 #include "muster_link_spi.h"
 #include <stdio.h>

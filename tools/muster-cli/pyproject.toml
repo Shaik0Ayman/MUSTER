@@ -2,8 +2,25 @@
 name = "muster-cli"
 version = "0.2.0"
 description = "Split one embedded program across many microcontroller boards"
+readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "GPL-3.0-only" }
+authors = [{ name = "Shaik Ayman Hameed Baig" }, { name = "Lahari" }]
+keywords = ["embedded", "microcontroller", "esp32", "avr", "can", "platformio", "mcp"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C",
+  "Topic :: Software Development :: Embedded Systems",
+]
 dependencies = ["pyyaml", "libclang>=16", "wireviz>=0.4"]
+
+[project.urls]
+Homepage = "https://github.com/Shaik0Ayman/MUSTER"
+Issues = "https://github.com/Shaik0Ayman/MUSTER/issues"
+Changelog = "https://github.com/Shaik0Ayman/MUSTER/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = ["pytest"]

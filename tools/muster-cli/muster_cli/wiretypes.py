@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 The Muster contributors
 """Types that may cross a board boundary, and how they are encoded.
 
 A type descriptor is a small dict, produced by the analyser and consumed by

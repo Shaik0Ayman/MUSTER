@@ -63,3 +63,23 @@ Short records of choices that are easy to second-guess. Add new ones at the bott
     trampolines need the user's structs and functions, and the user's code needs the
     typed call stubs; one header included at that point gives both without asking the
     user to move types into headers.
+25. **Modules are assigned as a whole wanted set and reconciled from heartbeats.** `ASSIGN`
+    carries everything a board should run, and every worker `BEAT` says what it runs and
+    declined; the lead resends on a mismatch. A lost or repeated message is harmless and
+    needs no acknowledgement of its own. A module stays where it is while its board is
+    alive and has not declined it, because moving it loses its state (see 6).
+26. **A shared image takes its node ID from the chip.** Boards of one type get one build
+    (`shared_images: true`); the ID is `1 + CRC-16(uid ‖ salt) % 199`. The lead refuses a
+    second live board with the same ID and a different `uid` (`ACK ok=4`); the newcomer
+    re-salts. 200..253 are for boards with a fixed ID, which cannot move out of a clash.
+    The link learns the new ID through the optional `muster_link.set_id`, because CAN puts
+    the ID in the arbitration field.
+27. **Modules run outside `muster_poll()`.** The generated `muster_loop()` polls, then
+    starts, runs and stops modules, so a module may use the blocking `muster_<task>()` stubs
+    (a task may not). A module can therefore be a prototype before the glue and a definition
+    after it. A RUN step longer than `MUSTER_NODE_TIMEOUT_MS` gets the board declared lost,
+    as with tasks.
+28. **Image facts stay build flags.** The planned per-board-type header was not generated:
+    a shared image is its own PlatformIO env with the same `-D` flags as any board, which
+    keeps the old projects byte-for-byte what they were and avoids quoting a header name
+    through `build_flags`. Module code is what lives in headers (`modules/*.h`).

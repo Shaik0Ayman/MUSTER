@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* test_core.c - core hardening (ROADMAP M1) and regression tests for bugs
  * found in review. Three boards on an 8-byte-MTU bus (classic CAN):
  *   node 0  lead    240 MHz  holds T_NEST, T_BIG

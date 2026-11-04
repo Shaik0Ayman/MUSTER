@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 The Muster contributors
 """The toolchain's operations, shared by the CLI (cli.py) and the MCP server
 (mcp_server.py) so both behave identically:
 
@@ -60,6 +62,7 @@ def load_inventory(path, db=None):
     if not isinstance(raw.get("boards"), list) or not raw["boards"]:
         raise MusterError(f"{path}: expected a 'boards:' list of {{id, type, port}}")
     inv = []
+    shared = bool(raw.get("shared_images"))      # one image per board type; see images.py
     for entry in raw["boards"]:
         if not isinstance(entry, dict) or "id" not in entry or "type" not in entry:
             raise MusterError(f"{path}: every board needs an 'id' and a 'type'")
@@ -67,7 +70,7 @@ def load_inventory(path, db=None):
             raise MusterError(
                 f"unknown board type '{entry['type']}'. Known: {', '.join(db['boards'])}. "
                 f"Add it to the board database first; muster never guesses pinouts.")
-        inv.append({**entry, "spec": db["boards"][entry["type"]]})
+        inv.append({**entry, "spec": db["boards"][entry["type"]], "shared_images": shared})
     return inv
 
 
@@ -113,6 +116,8 @@ def make(plan, boards_path, source, out_dir, wiring=True):
     result["placement"] = {b["id"]: [a["task"] for a in plan["assignments"] if b["id"] in a["boards"]]
                            for b in inventory}
     result["lead"] = plan["lead"]
+    if plan.get("modules"):
+        result["modules"] = {m["module"]: m["boards"] for m in plan["modules"]}
     if wiring:
         result["wiring"] = build_wiring(inventory, db, out, warnings)
     return result

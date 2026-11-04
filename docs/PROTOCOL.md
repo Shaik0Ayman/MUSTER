@@ -1,10 +1,16 @@
-# Muster wire protocol — version 2
+# Muster wire protocol — version 3
 
 Source of truth is `firmware/src/muster.h`. If you change bytes on the wire,
 bump `MUSTER_PROTO_VERSION` and update this file in the same commit.
 
 All multi-byte fields are **little-endian, fixed width**. Floats are IEEE-754
 binary32. Never send native `int`, `long`, `double`, or raw structs.
+
+**Changes from v2:** `JOIN` gained `uid u32, modules u8` (19 bytes in all); `ACK`
+gained `uid u32` and code 4 (ID clash); `BEAT` gained `running u8, refused u8`;
+new message `ASSIGN` (6). The lead can now hand long-running *modules* to
+boards, and a worker may derive its node ID from a chip-unique number. Frame
+layouts are unchanged; a v2 and a v3 board refuse each other at `JOIN`.
 
 **Changes from v1:** `ACK` gained codes 2 (rejoin) and 3 (table full);
 heartbeats are sent on a fixed period on every link; workers resend unanswered
@@ -55,11 +61,12 @@ Header (3 bytes): `type u8, src u8, dst u8`.
 
 | Type | ID | Direction | Body |
 |---|---|---|---|
-| `JOIN` | 1 | worker → broadcast | `ver u8, cores u8, flags u8, ram_kb u16, clock_mhz u16, resident u32` |
-| `ACK` | 2 | lead → worker | `ver u8, ok u8` (see codes below) |
-| `BEAT` | 3 | worker → lead; lead → broadcast | empty |
+| `JOIN` | 1 | worker → broadcast | `ver u8, cores u8, flags u8, ram_kb u16, clock_mhz u16, resident u32, uid u32, modules u8` |
+| `ACK` | 2 | lead → worker | `ver u8, ok u8, uid u32` (see codes below) |
+| `BEAT` | 3 | worker → lead; lead → broadcast | `running u8, refused u8` (the lead sends 0, 0) |
 | `CALL` | 4 | worker → lead (to place); lead → worker (to run) | `origin u8, call_id u8, task u8, args…` |
 | `RESULT` | 5 | worker → lead; lead → origin | `call_id u8, status i8, ret…` |
+| `ASSIGN` | 6 | lead → worker | `want u8` |
 
 - `flags`: bit0 FPU, bit1 Wi-Fi, bit2 BLE.
 - `resident`: bit *n* set ⇔ task ID *n* is flashed on that board. The lead
@@ -67,7 +74,16 @@ Header (3 bytes): `type u8, src u8, dst u8`.
 - `status`: `0` OK, `-1` ERR, `-2` ENOHOST, `-3` ETIMEOUT, `-4` ETASK. Any
   positive value received is treated as ERR.
 - `ACK ok`: `0` refused (protocol version mismatch), `1` accepted, `2` rejoin
-  (the lead does not know you), `3` refused (node table full).
+  (the lead does not know you), `3` refused (node table full), `4` ID clash
+  (another live board with a different `uid` already uses your node ID).
+- `uid`: tells apart two boards that briefly share a node ID. A board with a
+  fixed ID uses `uid = id`; one that derives its ID from a chip number (the low
+  4 bytes of an ESP32 MAC) uses that number. An `ACK` is acted on only if its
+  `uid` equals the receiver's own; `0xFFFFFFFF` means "any board" and is used
+  for `ok=0` and `ok=2`, which the lead sends without knowing the sender's uid.
+- `modules` / `want` / `running` / `refused`: 8-bit masks, bit *k* = module *k*.
+  `modules` = flashed on that board; `want` = the full set the lead wants it to
+  run; `running` = what it runs now; `refused` = modules it declined to start.
 - `args` is at most `MUSTER_MAX_MSG - 6` bytes, `ret` at most `MUSTER_MAX_MSG - 5`.
   A result that does not fit is sent as `status = ERR` with no data.
 
@@ -82,6 +98,33 @@ Header (3 bytes): `type u8, src u8, dst u8`.
 
 A worker clears its duplicate cache whenever it (re)joins: call IDs restart
 with a new lead.
+
+**ID from a chip number.** A worker that uses `muster_set_uid()` takes node ID
+`1 + CRC-16(uid[4] ‖ salt) % 199` (IDs 1..199; 0 is the lead, 200..253 are left
+for boards with a fixed ID, which cannot move out of a clash; `0xFE`/`0xFF` are
+reserved), `salt` starting at 0. If the lead already has a
+*live* node with that ID and a different `uid`, it answers the later `JOIN` with
+`ACK ok=4` (event `REFUSED`) and leaves its table alone. The newcomer increments
+`salt`, takes the new ID, tells its links (`muster_link.set_id`, because CAN puts
+the ID in the arbitration field) and sends `JOIN` again. Until the clash is
+resolved the two boards use the same CAN identifier; that window and the
+resulting bus errors have **not been observed on hardware**.
+
+**Modules.** A module is a long-running unit (start / run / stop in the
+application), unlike a task, which is one call. The lead holds `count` per
+module and keeps `want` per node:
+- a module stays on its board while that board is alive and has not declined
+  it; only a shortfall or surplus is moved (state does not move);
+- a new copy goes to the live, non-declining board holding the module with the
+  fewest assigned modules (the lead counts as one busier), then most RAM, then
+  lowest ID;
+- every change sends `ASSIGN` with the board's whole `want` set;
+- every worker `BEAT` carries `running`/`refused`; if `running` differs from
+  `want & ~refused` the lead sends `ASSIGN` again, so a lost `ASSIGN` heals
+  within one heartbeat;
+- a worker whose lead is lost treats its `want` as empty. A (re)joining board
+  starts with nothing assigned.
+Events (lead): `MODULE_START` (module, node), `MODULE_STOP`.
 
 **Rejoin.** If the lead receives anything other than `JOIN` from a node it does
 not have as alive (the lead restarted, or it wrote the node off as lost while

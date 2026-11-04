@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* muster_link_spi.h - point-to-point SPI link between two ESP32-S3 boards.
  *
  * Spec: docs/SPI_LINK_SPEC.md. Read it before changing this file.

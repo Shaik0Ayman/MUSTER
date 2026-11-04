@@ -32,6 +32,20 @@
  transport  TWAI (ESP32 CAN) · MCP2515 (Nano CAN) · SPI (ESP32-S3) · loopback (tests)
 ```
 
+## Modules and shared images
+A **task** is one call, placed per call. A **module** is a long-running unit
+(`int8_t name(uint8_t event)`: START, RUN, STOP) that the lead hands to boards:
+`muster_set_module(id, count)` says how many boards run it, `ASSIGN` tells a board
+what to run, and the board's heartbeat reports what it runs or declined (START may
+return < 0 when its hardware is missing; the lead tries another board). The core
+only keeps score; the generated `muster_loop()` starts and stops the code. Modules
+need `MUSTER_MAX_MODULES > 0` (default 8 on ESP32, 0 on AVR).
+
+With `shared_images: true` all boards of a type that can read a chip number (and are
+not the lead) are one firmware image: the code for every task and module any of them
+may hold is in it, and the lead decides at run time. See `PROTOCOL.md` for the wire
+side.
+
 ## The two contracts
 
 ```c
@@ -43,10 +57,13 @@ typedef struct muster_link {
     int      (*send)(struct muster_link *l, uint8_t dst, const uint8_t *frame, uint16_t len);
     uint16_t (*recv)(struct muster_link *l, uint8_t *src, uint8_t *frame, uint16_t cap);
     void     *ctx;
+    void (*set_id)(struct muster_link *l, uint8_t id);  /* optional, may be NULL */
 } muster_link;
 ```
 
 A link sends and receives **whole frames** and reports the source node ID.
+`set_id` is called if the board's node ID changes after the link started (CAN puts
+it on the wire).
 It never interprets the frame contents. `recv` must not block.
 
 A task runs inside `muster_poll()`. It may call `muster_call_async()`, but not

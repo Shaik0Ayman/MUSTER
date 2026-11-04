@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* muster_link_mcp2515.h - CAN link for boards without on-chip CAN (Arduino
  * Nano/Uno) using an MCP2515 + TJA1050 module over SPI.
  * Library: autowp/arduino-mcp2515 (PlatformIO: autowp/autowp-mcp2515).
@@ -51,6 +53,8 @@ static uint16_t mmcp_recv(muster_link *l, uint8_t *src, uint8_t *f, uint16_t cap
     return 0;
 }
 
+static void mmcp_set_id(muster_link *l, uint8_t id) { ((muster_mcp_ctx *)l->ctx)->self = id; }
+
 static int muster_mcp2515_begin(muster_link *link, muster_mcp_ctx *ctx,
                                 MCP2515 *mcp, uint8_t node_id)
 {
@@ -60,6 +64,7 @@ static int muster_mcp2515_begin(muster_link *link, muster_mcp_ctx *ctx,
     ctx->mcp = mcp; ctx->self = node_id;
     link->mtu = 8; link->kbps = 500;
     link->send = mmcp_send; link->recv = mmcp_recv; link->ctx = ctx;
+    link->set_id = mmcp_set_id;
     return 0;
 }
 #endif

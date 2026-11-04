@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /*
  * muster.h - Muster runtime: a framework for multi-MCU embedded systems.
  *
@@ -44,6 +46,7 @@ extern "C"
 #define MUSTER_DEF_RX_SLOTS 2
 #define MUSTER_DEF_LINKS 1
 #define MUSTER_DEF_DEDUPE 1
+#define MUSTER_DEF_MODULES 0 /* modules are for the bigger boards */
 #else
 #define MUSTER_DEF_NODES 8
 #define MUSTER_DEF_MSG 96
@@ -51,9 +54,15 @@ extern "C"
 #define MUSTER_DEF_RX_SLOTS 4
 #define MUSTER_DEF_LINKS 2
 #define MUSTER_DEF_DEDUPE 4
+#define MUSTER_DEF_MODULES 8
 #endif
 #ifndef MUSTER_MAX_NODES
 #define MUSTER_MAX_NODES MUSTER_DEF_NODES /* includes the lead       */
+#endif
+/* Modules: long-running units the lead hands to boards (ASSIGN). 0 compiles
+ * the whole feature out; the mask is 8 bits, so at most 8.                 */
+#ifndef MUSTER_MAX_MODULES
+#define MUSTER_MAX_MODULES MUSTER_DEF_MODULES
 #endif
 #ifndef MUSTER_MAX_TASKS
 #define MUSTER_MAX_TASKS 16 /* task IDs 0..15          */
@@ -113,14 +122,18 @@ extern "C"
 #if MUSTER_MAX_LINKS < 1 || MUSTER_MAX_LINKS > 8
 #error "MUSTER_MAX_LINKS must be 1..8"
 #endif
-#if MUSTER_MAX_MSG < 16
-#error "MUSTER_MAX_MSG must hold a JOIN (14 bytes)"
+#if MUSTER_MAX_MODULES < 0 || MUSTER_MAX_MODULES > 8
+#error "MUSTER_MAX_MODULES must be 0..8 (8-bit module mask)"
+#endif
+#if MUSTER_MAX_MSG < 20
+#error "MUSTER_MAX_MSG must hold a JOIN (19 bytes)"
 #endif
 #if MUSTER_DEDUPE < 1
 #error "MUSTER_DEDUPE must be at least 1"
 #endif
 
-#define MUSTER_PROTO_VERSION 2u
+#define MUSTER_PROTO_VERSION 3u
+#define MUSTER_UID_ANY 0xFFFFFFFFul /* ACK that applies to any board (REJOIN) */
 #define MUSTER_BROADCAST 0xFFu
 #define MUSTER_NO_NODE 0xFEu
 
@@ -146,6 +159,7 @@ extern "C"
 #define MUSTER_ACK_OK 1
 #define MUSTER_ACK_REJOIN 2 /* lead does not know you: send JOIN again   */
 #define MUSTER_ACK_FULL 3   /* lead's node table is full                 */
+#define MUSTER_ACK_CLASH 4  /* another live board has your ID: pick a new one */
 
     /* telemetry events (a = task or node, b = node or detail) */
     enum
@@ -157,7 +171,10 @@ extern "C"
         MUSTER_EV_RETRY,      /* a = task, b = node that failed    (lead)   */
         MUSTER_EV_ACCEPTED,   /* a = lead node                     (worker) */
         MUSTER_EV_VERSION,    /* a = peer, b = its protocol version         */
-        MUSTER_EV_REFUSED     /* a = peer, b = ACK code (table full)        */
+        MUSTER_EV_REFUSED,    /* a = peer, b = ACK code (table full, clash) */
+        MUSTER_EV_MODULE_START, /* a = module, b = node it is assigned to (lead) */
+        MUSTER_EV_MODULE_STOP,  /* a = module, b = node it was taken from (lead) */
+        MUSTER_EV_IDCLASH     /* a = old ID, b = new ID            (worker) */
     };
 
     /* ------------------------------------------------------------ interfaces */
@@ -180,6 +197,10 @@ extern "C"
         uint16_t (*recv)(struct muster_link *l, uint8_t *src,
                          uint8_t *frame, uint16_t cap);
         void *ctx;
+        /* Optional. Called when this board's node ID changes after the link
+         * started (muster_set_uid, or a collision with another board's ID),
+         * for links that put the ID on the wire (CAN). NULL = nothing to do. */
+        void (*set_id)(struct muster_link *l, uint8_t id);
     } muster_link;
 
     typedef void (*muster_event_fn)(uint8_t ev, uint8_t a, uint8_t b, void *user);
@@ -199,7 +220,11 @@ extern "C"
         uint8_t used, id, cores, flags, alive, inflight;
         uint16_t ram_kb, clock_mhz;
         uint32_t resident;
+        uint32_t uid;    /* tells two boards with the same ID apart */
         uint32_t queued; /* cost units dispatched, not yet done */
+#if MUSTER_MAX_MODULES > 0
+        uint8_t mods, want, running, refused; /* held / assigned / running / declined */
+#endif
         muster_route rt;
     } muster_node;
 
@@ -233,7 +258,12 @@ extern "C"
     typedef struct
     {
         uint8_t id, is_lead, cores, flags, lead, joined, next_call;
-        uint8_t nlinks, busy, done_next;
+        uint8_t nlinks, busy, done_next, auto_id, salt;
+        uint32_t uid; /* == id unless muster_set_uid() was used */
+#if MUSTER_MAX_MODULES > 0
+        uint8_t mods, mods_want, mods_running, mods_refused;
+        uint8_t mod_count[MUSTER_MAX_MODULES]; /* lead: boards wanted per module */
+#endif
         uint16_t ram_kb, clock_mhz;
         uint32_t resident, last_beat;
         uint32_t (*millis)(void);
@@ -264,6 +294,26 @@ extern "C"
     void muster_set_cost(muster_t *m, uint8_t id, uint16_t cost);
     void muster_on_event(muster_t *m, muster_event_fn fn, void *user);
     void muster_poll(muster_t *m);
+
+    /* Give a WORKER an identity that survives having no fixed node ID (the
+     * low bytes of a chip MAC). Call right after muster_begin(), before the
+     * first poll. The node ID becomes 1 + hash(uid, salt) % 199; if the lead
+     * reports another live board with that ID the worker re-hashes with the
+     * next salt and joins again (MUSTER_EV_IDCLASH). Never use on the lead. */
+    void muster_set_uid(muster_t *m, uint32_t uid);
+
+    /* Modules: long-running units. The core only keeps score; the caller
+     * starts and stops them (see the generated muster_loop()).
+     *   register_module  this board holds module `id` (before the first poll)
+     *   set_module       lead: run module `id` on `count` boards (0 = off)
+     *   module_want      modules this board should run now (0 while the lead
+     *                    is unreachable)
+     *   module_report    what is running here and what this board declined
+     *                    (e.g. a START that found its hardware missing)     */
+    void muster_register_module(muster_t *m, uint8_t id);
+    void muster_set_module(muster_t *m, uint8_t id, uint8_t count);
+    uint8_t muster_module_want(const muster_t *m);
+    void muster_module_report(muster_t *m, uint8_t running, uint8_t refused);
 
     /* Submit a call; returns a handle >= 0, or a negative MUSTER_E* code.
      * args may be at most MUSTER_MAX_ARGS bytes.                               */
@@ -406,7 +456,8 @@ enum
     M_ACK,
     M_BEAT,
     M_CALL,
-    M_RESULT
+    M_RESULT,
+    M_ASSIGN
 };
 #define M_HDR 3u /* type, src, dst                               */
 #define F_HDR 2u /* per-frame: dst, index | last<<7              */
@@ -491,7 +542,7 @@ static int m_send_msg(muster_t *m, uint8_t dst, const uint8_t *h, uint16_t hl,
 
 static void m_send_join(muster_t *m)
 {
-    uint8_t b[M_HDR + 11];
+    uint8_t b[M_HDR + 16];
     muster_wbuf w;
     muster_w_init(&w, b, sizeof b);
     muster_put_u8(&w, M_JOIN);
@@ -503,29 +554,60 @@ static void m_send_join(muster_t *m)
     muster_put_u16(&w, m->ram_kb);
     muster_put_u16(&w, m->clock_mhz);
     muster_put_u32(&w, m->resident);
+    muster_put_u32(&w, m->uid);
+#if MUSTER_MAX_MODULES > 0
+    muster_put_u8(&w, m->mods);
+#else
+    muster_put_u8(&w, 0);
+#endif
     m_send_all(m, MUSTER_BROADCAST, b, w.n, 0, 0);
 }
 
 /* Heartbeats go out on every link so the peer learns each way to reach us. */
 static void m_send_beat(muster_t *m, uint8_t dst)
 {
-    uint8_t b[M_HDR];
+    uint8_t b[M_HDR + 2];
     b[0] = M_BEAT;
     b[1] = m->id;
     b[2] = dst;
+#if MUSTER_MAX_MODULES > 0
+    b[3] = m->mods_running; /* the lead compares these with what it assigned */
+    b[4] = m->mods_refused;
+#else
+    b[3] = b[4] = 0;
+#endif
     m_send_all(m, dst, b, sizeof b, 0, 0);
 }
 
-static void m_send_ack(muster_t *m, uint8_t dst, uint8_t code)
+/* `uid` names the board the answer is for: two boards may briefly share an
+ * ID, and only the one whose uid matches may act on it.                    */
+static void m_send_ack(muster_t *m, uint8_t dst, uint8_t code, uint32_t uid)
 {
-    uint8_t b[M_HDR + 2];
-    b[0] = M_ACK;
-    b[1] = m->id;
-    b[2] = dst;
-    b[3] = MUSTER_PROTO_VERSION;
-    b[4] = code;
-    m_send_msg(m, dst, b, sizeof b, 0, 0);
+    uint8_t b[M_HDR + 6];
+    muster_wbuf w;
+    muster_w_init(&w, b, sizeof b);
+    muster_put_u8(&w, M_ACK);
+    muster_put_u8(&w, m->id);
+    muster_put_u8(&w, dst);
+    muster_put_u8(&w, MUSTER_PROTO_VERSION);
+    muster_put_u8(&w, code);
+    muster_put_u32(&w, uid);
+    m_send_msg(m, dst, b, w.n, 0, 0);
 }
+
+#if MUSTER_MAX_MODULES > 0
+/* The full set of modules `n` should run. Sending the set (not a delta)
+ * makes a lost or repeated ASSIGN harmless. */
+static void m_send_assign(muster_t *m, const muster_node *n)
+{
+    uint8_t b[M_HDR + 1];
+    b[0] = M_ASSIGN;
+    b[1] = m->id;
+    b[2] = n->id;
+    b[3] = n->want;
+    m_send_msg(m, n->id, b, sizeof b, 0, 0);
+}
+#endif
 
 /* `lk` is the link to answer on (the one the CALL came in on, which is known
  * to work right now), or M_ROUTED to use the peer's route.                 */
@@ -868,19 +950,138 @@ static void m_dispatch(muster_t *m, muster_pending *p, uint8_t idx)
     }
 }
 
+/* ---------------------------------------------------- identity */
+/* ID from a chip-unique number: 1..199. 0 is the lead, 200..253 are left for
+ * boards with a fixed ID (they cannot move out of a collision), 0xFE/0xFF are
+ * reserved. The salt moves a board out of a collision. */
+#define M_UID_SPAN 199u
+static void m_set_id(muster_t *m, uint8_t id)
+{
+    uint8_t lk;
+    m->id = id;
+    for (lk = 0; lk < m->nlinks; lk++)
+        if (m->links[lk]->set_id)
+            m->links[lk]->set_id(m->links[lk], id);
+}
+
+static uint8_t m_uid_id(uint32_t uid, uint8_t salt)
+{
+    uint8_t b[5];
+    b[0] = (uint8_t)uid;
+    b[1] = (uint8_t)(uid >> 8);
+    b[2] = (uint8_t)(uid >> 16);
+    b[3] = (uint8_t)(uid >> 24);
+    b[4] = salt;
+    return (uint8_t)(1u + muster_crc16(b, sizeof b) % M_UID_SPAN);
+}
+
+#if MUSTER_MAX_MODULES > 0
+/* ---------------------------------------------------- lead: module placement */
+static uint8_t m_pop8(uint8_t v)
+{
+    uint8_t n = 0;
+    while (v)
+    {
+        n = (uint8_t)(n + (v & 1u));
+        v = (uint8_t)(v >> 1);
+    }
+    return n;
+}
+
+static int m_mod_eligible(const muster_node *n, uint8_t bit)
+{
+    return n->used && n->alive && (n->mods & bit) && !(n->refused & bit);
+}
+
+/* Is `a` a better home for one more module than `b`? Fewest modules first
+ * (the lead counts as one busier: it has its own job), then most RAM, then
+ * the lower ID, so the answer never depends on table order. */
+static int m_mod_better(const muster_t *m, const muster_node *a, const muster_node *b)
+{
+    uint8_t la = (uint8_t)(m_pop8(a->want) + (a->id == m->id)),
+            lb = (uint8_t)(m_pop8(b->want) + (b->id == m->id));
+    if (la != lb)
+        return la < lb;
+    if (a->ram_kb != b->ram_kb)
+        return a->ram_kb > b->ram_kb;
+    return a->id < b->id;
+}
+
+/* Bring each module to its wanted count. A module stays where it is while
+ * that board is alive and has not declined it (moving loses its state);
+ * only the shortfall or surplus is moved. */
+static void m_place_modules(muster_t *m)
+{
+    uint8_t k, i, before[MUSTER_MAX_NODES];
+    for (i = 0; i < MUSTER_MAX_NODES; i++)
+        before[i] = m->nodes[i].want;
+    for (k = 0; k < MUSTER_MAX_MODULES; k++)
+    {
+        uint8_t bit = (uint8_t)(1u << k), have = 0;
+        muster_node *pick;
+        for (i = 0; i < MUSTER_MAX_NODES; i++)
+        {
+            muster_node *n = &m->nodes[i];
+            if (!(n->used && (n->want & bit)))
+                continue;
+            if (m_mod_eligible(n, bit))
+                have++;
+            else
+                n->want = (uint8_t)(n->want & ~bit);
+        }
+        while (have > m->mod_count[k])
+        { /* surplus: take it from the busiest board */
+            pick = 0;
+            for (i = 0; i < MUSTER_MAX_NODES; i++)
+                if (m->nodes[i].used && (m->nodes[i].want & bit) &&
+                    (!pick || m_mod_better(m, pick, &m->nodes[i])))
+                    pick = &m->nodes[i];
+            pick->want = (uint8_t)(pick->want & ~bit);
+            have--;
+        }
+        while (have < m->mod_count[k])
+        { /* shortfall: give it to the best free board */
+            pick = 0;
+            for (i = 0; i < MUSTER_MAX_NODES; i++)
+                if (m_mod_eligible(&m->nodes[i], bit) && !(m->nodes[i].want & bit) &&
+                    (!pick || m_mod_better(m, &m->nodes[i], pick)))
+                    pick = &m->nodes[i];
+            if (!pick)
+                break; /* not enough boards hold it */
+            pick->want = (uint8_t)(pick->want | bit);
+            have++;
+        }
+    }
+    for (i = 0; i < MUSTER_MAX_NODES; i++)
+    {
+        muster_node *n = &m->nodes[i];
+        uint8_t diff = (uint8_t)(n->want ^ before[i]);
+        if (!diff)
+            continue;
+        for (k = 0; k < MUSTER_MAX_MODULES; k++)
+            if (diff & (1u << k))
+                m_event(m, (n->want & (1u << k)) ? MUSTER_EV_MODULE_START : MUSTER_EV_MODULE_STOP,
+                        k, n->id);
+        if (n->id != m->id && n->alive)
+            m_send_assign(m, n);
+    }
+}
+#endif
+
 /* ---------------------------------------------------- message handling */
 static void m_on_join(muster_t *m, muster_rbuf *r, uint8_t lk, uint8_t src)
 {
     uint8_t ver = muster_get_u8(r), cores, flags;
     uint16_t ram_kb, clock_mhz;
-    uint32_t resident;
+    uint32_t resident, uid;
+    uint8_t modules;
     muster_node *n;
     if (!m->is_lead)
         return;
     if (ver != MUSTER_PROTO_VERSION)
     { /* refuse loudly        */
         m_event(m, MUSTER_EV_VERSION, src, ver);
-        m_send_ack(m, src, MUSTER_ACK_REFUSED);
+        m_send_ack(m, src, MUSTER_ACK_REFUSED, MUSTER_UID_ANY);
         return;
     }
     cores = muster_get_u8(r);
@@ -888,15 +1089,32 @@ static void m_on_join(muster_t *m, muster_rbuf *r, uint8_t lk, uint8_t src)
     ram_kb = muster_get_u16(r);
     clock_mhz = muster_get_u16(r);
     resident = muster_get_u32(r);
+    uid = muster_get_u32(r);
+    modules = muster_get_u8(r);
     if (r->err)
         return; /* truncated JOIN       */
+    n = m_node(m, src);
+    if (n && n->alive && n->uid != uid)
+    { /* a different board already holds this ID: it keeps it, the
+         newcomer is told to pick another (and ignored until it does) */
+        m_event(m, MUSTER_EV_REFUSED, src, MUSTER_ACK_CLASH);
+        m_send_ack(m, src, MUSTER_ACK_CLASH, uid);
+        return;
+    }
     n = m_node_add(m, src);
     if (!n)
     {
         m_event(m, MUSTER_EV_REFUSED, src, MUSTER_ACK_FULL);
-        m_send_ack(m, src, MUSTER_ACK_FULL);
+        m_send_ack(m, src, MUSTER_ACK_FULL, uid);
         return;
     }
+    n->uid = uid;
+#if MUSTER_MAX_MODULES > 0
+    n->mods = (uint8_t)(modules & ((1u << MUSTER_MAX_MODULES) - 1u));
+    n->want = n->running = n->refused = 0; /* a (re)joined board starts clean */
+#else
+    (void)modules;
+#endif
     n->cores = cores;
     n->flags = flags;
     n->ram_kb = ram_kb;
@@ -908,20 +1126,32 @@ static void m_on_join(muster_t *m, muster_rbuf *r, uint8_t lk, uint8_t src)
         n->alive = 1;
         m_event(m, MUSTER_EV_JOINED, src, 0);
     }
-    m_send_ack(m, src, MUSTER_ACK_OK);
+    m_send_ack(m, src, MUSTER_ACK_OK, uid);
 }
 
 static void m_on_ack(muster_t *m, muster_rbuf *r, uint8_t lk, uint8_t src)
 {
     uint8_t ver = muster_get_u8(r), code = muster_get_u8(r);
+    uint32_t uid;
     if (m->is_lead || r->err)
         return;
+    if (code == MUSTER_ACK_REFUSED)
+    { /* sent without a uid we could compare (it could not read our JOIN) */
+        m_event(m, MUSTER_EV_VERSION, src, ver);
+        return;
+    }
+    uid = muster_get_u32(r);
+    if (r->err || (uid != m->uid && uid != MUSTER_UID_ANY))
+        return; /* meant for another board that shares our ID */
     if (code == MUSTER_ACK_OK)
     {
         if (m->joined)
             return; /* duplicate ACK        */
         m->lead = src;
         m->joined = 1;
+#if MUSTER_MAX_MODULES > 0
+        m->mods_want = 0; /* the new lead assigns afresh */
+#endif
         memset(&m->lead_rt, 0, sizeof m->lead_rt);
         m_route_heard(m, &m->lead_rt, lk, m->millis());
         memset(m->done, 0, sizeof m->done); /* new lead, new call IDs */
@@ -934,9 +1164,13 @@ static void m_on_ack(muster_t *m, muster_rbuf *r, uint8_t lk, uint8_t src)
         m->joined = 0; /* JOIN on the next poll */
         m->last_beat = m->millis() - MUSTER_HEARTBEAT_MS;
     }
-    else if (code == MUSTER_ACK_REFUSED)
-    {
-        m_event(m, MUSTER_EV_VERSION, src, ver);
+    else if (code == MUSTER_ACK_CLASH && !m->joined && m->auto_id)
+    { /* try the next hash; a board with a fixed ID cannot move */
+        uint8_t old = m->id;
+        m->salt++;
+        m_set_id(m, m_uid_id(m->uid, m->salt));
+        m->last_beat = m->millis() - MUSTER_HEARTBEAT_MS; /* JOIN again now */
+        m_event(m, MUSTER_EV_IDCLASH, old, m->id);
     }
     else
     {
@@ -1034,6 +1268,40 @@ static void m_on_result(muster_t *m, muster_rbuf *r, const uint8_t *b, uint16_t 
     }
 }
 
+/* A worker's heartbeat says what it runs and what it declined. If that is not
+ * what we assigned, say so again: a lost ASSIGN heals within one beat. */
+static void m_on_beat(muster_t *m, muster_rbuf *r, uint8_t src)
+{
+#if MUSTER_MAX_MODULES > 0
+    uint8_t running = muster_get_u8(r), refused = muster_get_u8(r);
+    muster_node *n = m->is_lead ? m_node(m, src) : 0;
+    if (!n || r->err)
+        return;
+    n->running = running;
+    n->refused = refused;
+    if (running != (uint8_t)(n->want & ~refused))
+        m_send_assign(m, n);
+#else
+    (void)m;
+    (void)r;
+    (void)src;
+#endif
+}
+
+static void m_on_assign(muster_t *m, muster_rbuf *r, uint8_t src)
+{
+#if MUSTER_MAX_MODULES > 0
+    uint8_t want = muster_get_u8(r);
+    if (m->is_lead || r->err || !m->joined || src != m->lead)
+        return;
+    m->mods_want = (uint8_t)(want & m->mods);
+#else
+    (void)m;
+    (void)r;
+    (void)src;
+#endif
+}
+
 static void m_handle(muster_t *m, uint8_t lk, const uint8_t *b, uint16_t len)
 {
     muster_rbuf r;
@@ -1056,7 +1324,7 @@ static void m_handle(muster_t *m, uint8_t lk, const uint8_t *b, uint16_t len)
             m_route_heard(m, &n->rt, lk, m->millis());
         else if (type != M_JOIN)
         {
-            m_send_ack(m, src, MUSTER_ACK_REJOIN);
+            m_send_ack(m, src, MUSTER_ACK_REJOIN, MUSTER_UID_ANY);
             return;
         }
     }
@@ -1074,7 +1342,11 @@ static void m_handle(muster_t *m, uint8_t lk, const uint8_t *b, uint16_t len)
         m_on_ack(m, &r, lk, src);
         return;
     case M_BEAT:
-        return; /* route updated above  */
+        m_on_beat(m, &r, src); /* route updated above */
+        return;
+    case M_ASSIGN:
+        m_on_assign(m, &r, src);
+        return;
     case M_CALL:
         m_on_call(m, &r, b, len, lk, src);
         return;
@@ -1204,6 +1476,9 @@ static void m_poll_lead(muster_t *m, uint32_t now)
             m_event(m, MUSTER_EV_LOST, nd->id, 0);
         }
     }
+#if MUSTER_MAX_MODULES > 0
+    m_place_modules(m); /* joins, losses and refusals all show up here */
+#endif
     /* timeouts and failover */
     for (i = 0; i < MUSTER_MAX_PENDING; i++)
     {
@@ -1240,6 +1515,7 @@ void muster_begin(muster_t *m, uint8_t node_id, int is_lead,
 {
     memset(m, 0, sizeof *m);
     m->id = node_id;
+    m->uid = node_id; /* fixed-ID boards: the ID is the identity */
     m->is_lead = (uint8_t)(is_lead ? 1 : 0);
     m->cores = cores;
     m->ram_kb = ram_kb;
@@ -1252,6 +1528,7 @@ void muster_begin(muster_t *m, uint8_t node_id, int is_lead,
     { /* the lead is a node too       */
         muster_node *self = m_node_add(m, node_id);
         self->alive = 1;
+        self->uid = node_id;
         self->cores = cores;
         self->flags = flags;
         self->ram_kb = ram_kb;
@@ -1284,6 +1561,77 @@ void muster_register_task(muster_t *m, uint8_t id, muster_task_fn fn, uint16_t c
         if (s)
             s->resident = m->resident;
     }
+}
+
+void muster_set_uid(muster_t *m, uint32_t uid)
+{
+    if (m->is_lead)
+        return; /* the lead's ID is fixed */
+    m->uid = uid;
+    m->auto_id = 1;
+    m->salt = 0;
+    m_set_id(m, m_uid_id(uid, 0));
+}
+
+void muster_register_module(muster_t *m, uint8_t id)
+{
+#if MUSTER_MAX_MODULES > 0
+    muster_node *s;
+    if (id >= MUSTER_MAX_MODULES)
+        return;
+    m->mods = (uint8_t)(m->mods | (1u << id));
+    s = m->is_lead ? m_node(m, m->id) : 0;
+    if (s)
+        s->mods = m->mods;
+#else
+    (void)m;
+    (void)id;
+#endif
+}
+
+void muster_set_module(muster_t *m, uint8_t id, uint8_t count)
+{
+#if MUSTER_MAX_MODULES > 0
+    if (id < MUSTER_MAX_MODULES)
+        m->mod_count[id] = count;
+#else
+    (void)m;
+    (void)id;
+    (void)count;
+#endif
+}
+
+uint8_t muster_module_want(const muster_t *m)
+{
+#if MUSTER_MAX_MODULES > 0
+    if (m->is_lead)
+    {
+        const muster_node *s = muster_node_by_id(m, m->id);
+        return s ? s->want : 0;
+    }
+    return m->joined ? m->mods_want : 0; /* no lead, no assignments */
+#else
+    (void)m;
+    return 0;
+#endif
+}
+
+void muster_module_report(muster_t *m, uint8_t running, uint8_t refused)
+{
+#if MUSTER_MAX_MODULES > 0
+    muster_node *s = m->is_lead ? m_node(m, m->id) : 0;
+    m->mods_running = running;
+    m->mods_refused = refused;
+    if (s)
+    {
+        s->running = running;
+        s->refused = refused;
+    }
+#else
+    (void)m;
+    (void)running;
+    (void)refused;
+#endif
 }
 
 void muster_set_cost(muster_t *m, uint8_t id, uint16_t cost)

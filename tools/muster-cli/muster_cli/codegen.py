@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 The Muster contributors
 """Generates muster_gen.h: the typed glue between the user's functions and the
 runtime. Fully deterministic; nothing here comes from a model.
 
@@ -7,13 +9,17 @@ it sees the user's structs and functions) and provides:
   mg_put_T / mg_get_T     encoders for each struct a task exchanges
   muster_tr_<task>        trampolines: bytes in -> typed call -> bytes out
   muster_setup()          bring up the CAN link and the runtime, register the
-                          tasks resident on this board (call from setup())
-  muster_loop()           muster_poll() (call from loop())
+                          tasks and modules resident on this board (call from
+                          setup())
+  muster_loop()           muster_poll(), then start/run/stop this board's
+                          modules as the lead assigns them (call from loop())
   muster_<task>(...)      run <task> wherever the lead places it (blocking)
   muster_<task>_async / muster_<task>_result   the non-blocking pair
 
-Per-board facts (node ID, lead flag, resident mask, link pins, capabilities)
-arrive as -D flags from platformio.ini, so one header serves every board.
+Per-board facts (node ID, lead flag, resident masks, link pins, capabilities)
+arrive as -D flags from platformio.ini, so one header serves every board. In a
+shared-image project (MUSTER_ID_FROM_UID) the node ID comes from the chip's
+factory MAC at run time and the lead hands out the modules.
 The link is TWAI or MCP2515 (from the board DB), or MUSTER_GEN_LINK_EXTERNAL:
 the application defines `muster_link *muster_gen_external_link(void)`.
 """
@@ -23,7 +29,8 @@ from . import wiretypes as wt
 RESERVED = {
     "begin", "add_link", "register_task", "set_cost", "on_event", "poll", "call",
     "call_async", "result", "cancel", "alive_count", "node_by_id", "crc16", "w_init",
-    "r_init", "setup", "loop", "rt", "can", "link",
+    "r_init", "setup", "loop", "rt", "can", "link", "set_uid", "register_module",
+    "set_module", "module_want", "module_report", "mod", "modules",
 } | {f"{d}_{s}" for d in ("put", "get") for s in ("u8", "u16", "u32", "i8", "i16", "i32", "f32")}
 
 
@@ -110,7 +117,42 @@ def _stubs(t):
     return blocking + [""] + async_ + [""] + result
 
 
+def module_id_macro(name):
+    return f"MUSTER_MODULE_ID_{name.upper()}"
+
+
+def _modules_step(modules):
+    """muster_modules_step_(): start what the lead assigned, stop what it took
+    away, run what is running, and report back through the heartbeat. Called
+    from muster_loop(), outside muster_poll(), so a module may use the blocking
+    muster_<task>() stubs."""
+    out = ["#if MUSTER_MAX_MODULES > 0",
+           "static uint8_t muster_mod_running_, muster_mod_refused_;",
+           "static inline void muster_modules_step_(void) {",
+           "    const uint8_t mg_want = (uint8_t)(muster_module_want(&muster_rt) & MUSTER_MODULE_MASK);",
+           "    (void)mg_want;"]
+    for i, m in enumerate(modules):
+        n, bit = m["name"], f"(1u << {i})"
+        out += [f"#if (MUSTER_MODULE_MASK & {bit})",
+                f"    if ((muster_mod_running_ & {bit}) && !(mg_want & {bit})) {{",
+                f"        {n}(MUSTER_MOD_STOP);",
+                f"        muster_mod_running_ = (uint8_t)(muster_mod_running_ & ~{bit});",
+                f"    }} else if (!(muster_mod_running_ & {bit}) && (mg_want & {bit}) &&",
+                f"               !(muster_mod_refused_ & {bit})) {{",
+                f"        if ({n}(MUSTER_MOD_START) < 0)   /* declined: lead tries another board */",
+                f"            muster_mod_refused_ = (uint8_t)(muster_mod_refused_ | {bit});",
+                "        else",
+                f"            muster_mod_running_ = (uint8_t)(muster_mod_running_ | {bit});",
+                "    }",
+                f"    if (muster_mod_running_ & {bit}) {n}(MUSTER_MOD_RUN);",
+                "#endif"]
+    out += ["    muster_module_report(&muster_rt, muster_mod_running_, muster_mod_refused_);",
+            "}", "#endif"]
+    return out
+
+
 def _setup(analysis):
+    modules = analysis.get("modules", [])
     out = [
         "static muster_t    muster_rt;",
         "static muster_link muster_can;",
@@ -124,6 +166,7 @@ def _setup(analysis):
         "#endif",
         "static uint32_t muster_millis_(void) { return millis(); }",
         "",
+    ] + (_modules_step(modules) + [""] if modules else []) + [
         "/* Call from setup(). Returns 0, or -1 if the link did not start. */",
         "static inline int muster_setup(void) {",
         "    int rc;",
@@ -141,6 +184,15 @@ def _setup(analysis):
         "    muster_begin(&muster_rt, MUSTER_NODE_ID, MUSTER_LEAD, MUSTER_GEN_CORES,",
         "                 MUSTER_GEN_RAM_KB, MUSTER_GEN_CLOCK_MHZ, MUSTER_GEN_FLAGS,",
         "                 mg_link, muster_millis_);",
+        "#if defined(MUSTER_ID_FROM_UID)",
+        "    {   /* shared image: the node ID comes from the chip, not the build. NOT",
+        "           verified on hardware: esp_efuse_mac_get_default() on the S3. */",
+        "        uint8_t mg_mac[6];",
+        "        esp_efuse_mac_get_default(mg_mac);",
+        "        muster_set_uid(&muster_rt, ((uint32_t)mg_mac[2] << 24) | ((uint32_t)mg_mac[3] << 16) |",
+        "                                   ((uint32_t)mg_mac[4] << 8) | mg_mac[5]);",
+        "    }",
+        "#endif",
         "    /* every board knows every task's cost: the lead needs it to place",
         "       tasks it does not hold itself */",
     ]
@@ -151,9 +203,27 @@ def _setup(analysis):
         out += [f"#if (MUSTER_RESIDENT_MASK & (1ul << {tid}))",
                 f"    muster_register_task(&muster_rt, {tid}, muster_tr_{t['name']}, {t['cost']}u);",
                 "#endif"]
+    if modules:
+        out += ["#if MUSTER_MAX_MODULES > 0"]
+        for i, m in enumerate(modules):
+            out += [f"#if (MUSTER_MODULE_MASK & (1u << {i}))",
+                    f"    muster_register_module(&muster_rt, {i});",
+                    "#endif",
+                    f"#ifdef MUSTER_MODULE_COUNT_{m['name'].upper()}   /* lead only */",
+                    f"    muster_set_module(&muster_rt, {i}, MUSTER_MODULE_COUNT_{m['name'].upper()});",
+                    "#endif"]
+        out += ["#endif"]
     out += ["    return rc;", "}", "",
-            "/* Call from loop(), as often as possible. */",
-            "static inline void muster_loop(void) { muster_poll(&muster_rt); }"]
+            "/* Call from loop(), as often as possible. */"]
+    if modules:
+        out += ["static inline void muster_loop(void) {",
+                "    muster_poll(&muster_rt);",
+                "#if MUSTER_MAX_MODULES > 0",
+                "    muster_modules_step_();",
+                "#endif",
+                "}"]
+    else:
+        out += ["static inline void muster_loop(void) { muster_poll(&muster_rt); }"]
     return out
 
 
@@ -171,6 +241,9 @@ def generate_header(analysis):
            "#include <Arduino.h>",
            '#include "muster.h"',
            '#include "muster_plan.h"',
+           "#if defined(MUSTER_ID_FROM_UID)",
+           "#include <esp_system.h>",
+           "#endif",
            "#if defined(MUSTER_GEN_LINK_TWAI)",
            '#include "muster_link_twai.h"',
            "#elif defined(MUSTER_GEN_LINK_MCP2515)",
@@ -187,6 +260,10 @@ def generate_header(analysis):
     for t in analysis["tasks"]:
         out += _trampoline(t) + [""]
     out.append("/* ---- the runtime on this board */")
+    modules = analysis.get("modules", [])
+    if modules:
+        out += ["#ifndef MUSTER_MODULE_MASK", "#define MUSTER_MODULE_MASK 0   /* modules held by this image */",
+                "#endif", ""]
     out += _setup(analysis) + [""]
     out.append("/* ---- call any task wherever the lead places it */")
     for t in analysis["tasks"]:
@@ -199,4 +276,8 @@ def generate_plan_header(analysis):
     for i, t in enumerate(analysis["tasks"]):
         lines.append(f"#define {task_id_macro(t['name'])} {i}u")
     lines.append(f"#define MUSTER_TASK_COUNT {len(analysis['tasks'])}u")
+    for i, m in enumerate(analysis.get("modules", [])):
+        lines.append(f"#define {module_id_macro(m['name'])} {i}u")
+    if analysis.get("modules"):
+        lines.append(f"#define MUSTER_MODULE_TOTAL {len(analysis['modules'])}u")
     return "\n".join(lines) + "\n"

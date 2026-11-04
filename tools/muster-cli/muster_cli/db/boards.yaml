@@ -10,6 +10,7 @@ boards:
     cores: 2
     ram_kb: 512
     clock_mhz: 240
+    uid: efuse_mac             # chip-unique number (factory MAC): node IDs can derive from it
     flags: [fpu, wifi, ble]
     can:
       native: true               # on-chip TWAI controller, still needs a PHY
@@ -20,7 +21,7 @@ boards:
     power: { vcc: 3V3, gnd: GND }
     # muster.h defaults for this platform (firmware/src/muster.h, non-AVR branch).
     # Keep in sync: the validator sizes every call against the smallest board.
-    runtime: { max_msg: 96, max_nodes: 8, max_tasks: 16 }
+    runtime: { max_msg: 96, max_nodes: 8, max_tasks: 16, max_modules: 8 }
 
   nanoatmega328:
     name: Arduino Nano (ATmega328P)
@@ -37,7 +38,7 @@ boards:
     spi: { sck: D13, miso: D12, mosi: D11, cs: D9 }  # D10 taken by MCP2515
     attention_pin: D3
     power: { vcc: 5V, gnd: GND }
-    runtime: { max_msg: 40, max_nodes: 4, max_tasks: 16 }   # muster.h __AVR__ defaults
+    runtime: { max_msg: 40, max_nodes: 4, max_tasks: 16, max_modules: 0 }   # muster.h __AVR__ defaults
 
 modules:
   sn65hvd230:

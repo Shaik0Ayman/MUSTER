@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 The Muster contributors
 """Static analysis of the user's single main program, with libclang.
 
 What it extracts is FACT, not judgement (the validator judges):
@@ -23,7 +25,12 @@ and extended with:
            args_bytes, ret_bytes, errors [], warnings []
   types:   {struct name: {"fields": [{name, type}], "size": bytes}}
   diagnostics: [compiler errors outside what the analyser reports itself]
-  insert_line: last line of the last task (generated code goes after it)
+  modules[]: name, line, end_line, needs, ram_kb, count, errors, warnings
+             (MUSTER_MODULE(...) functions: int8_t name(uint8_t event))
+  local_headers: project headers the sketch includes (paths relative to it),
+             whose tasks and modules count as part of the program
+  insert_line: last line of the last task, module or local #include in the
+             sketch (generated code goes after it)
   has_gen_include: the sketch already #includes "muster_gen.h"
 """
 import re
@@ -88,9 +95,19 @@ def _parse(text, filename, include_dirs):
     return tu, tmp, stubbed, path
 
 
-def _in_main(cursor, path):
+def _under(p, d):
+    try:
+        Path(p).resolve().relative_to(Path(d).resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _in_project(cursor, path, stub_dir):
+    """In the sketch or in a header next to it (not a stub or a shim)."""
     f = cursor.location.file
-    return f is not None and Path(f.name).resolve() == Path(path)
+    return (f is not None and _under(f.name, Path(path).parent)
+            and not _under(f.name, stub_dir))
 
 
 # ------------------------------------------------------------- types
@@ -195,33 +212,37 @@ class _Resolver:
 
 
 # ------------------------------------------------------------- tasks
-def _parse_annotation(text, name, errors):
-    out = {"needs": [], "cost": 100, "ram_kb": 1}
+def _parse_annotation(text, name, errors, kind="task"):
+    out = {"needs": [], "ram_kb": 1}
+    out.update({"cost": 100} if kind == "task" else {"count": 1})
+    keys = ("needs", "cost", "ram") if kind == "task" else ("needs", "ram", "count")
     for part in [p.strip() for p in text.split(",") if p.strip()]:
         if "=" not in part:
-            errors.append(f"task '{name}': annotation item '{part}' is not key = value")
+            errors.append(f"{kind} '{name}': annotation item '{part}' is not key = value")
             continue
         key, val = [s.strip() for s in part.split("=", 1)]
         if key == "needs":
             out["needs"] = [v.strip().lower() for v in val.split("|") if v.strip()]
             unknown = set(out["needs"]) - KNOWN_NEEDS
             if unknown:
-                errors.append(f"task '{name}': unknown need(s) {', '.join(sorted(unknown))}; "
+                errors.append(f"{kind} '{name}': unknown need(s) {', '.join(sorted(unknown))}; "
                               f"known: {', '.join(sorted(KNOWN_NEEDS))}")
-        elif key in ("cost", "ram"):
+        elif key in keys:
             try:
                 v = int(val, 0)
             except ValueError:
-                errors.append(f"task '{name}': {key} = {val} is not an integer")
+                errors.append(f"{kind} '{name}': {key} = {val} is not an integer")
                 continue
-            if key == "cost" and not 1 <= v <= 65535:
-                errors.append(f"task '{name}': cost must be 1..65535 (it is a uint16_t)")
+            if key == "count" and not 1 <= v <= 8:
+                errors.append(f"{kind} '{name}': count must be 1..8 (boards that run it at once)")
+            elif key == "cost" and not 1 <= v <= 65535:
+                errors.append(f"{kind} '{name}': cost must be 1..65535 (it is a uint16_t)")
             elif key == "ram" and v < 0:
-                errors.append(f"task '{name}': ram must be >= 0")
-            out["cost" if key == "cost" else "ram_kb"] = v
+                errors.append(f"{kind} '{name}': ram must be >= 0")
+            out[{"ram": "ram_kb"}.get(key, key)] = v
         else:
-            errors.append(f"task '{name}': unknown annotation key '{key}' "
-                          f"(known: needs, cost, ram)")
+            errors.append(f"{kind} '{name}': unknown annotation key '{key}' "
+                          f"(known: {', '.join(keys)})")
     return out
 
 
@@ -255,12 +276,19 @@ def _annotation(fn):
     return None
 
 
-def _walk_decls(cursor, path):
+def _module_annotation(fn):
+    for c in fn.get_children():
+        if c.kind == CK.ANNOTATE_ATTR and c.spelling.startswith("muster-module:"):
+            return c.spelling[len("muster-module:"):]
+    return None
+
+
+def _walk_decls(cursor, path, stub_dir):
     for c in cursor.get_children():
-        if not _in_main(c, path):
+        if not _in_project(c, path, stub_dir):
             continue
         if c.kind == CK.NAMESPACE:
-            yield from _walk_decls(c, path)
+            yield from _walk_decls(c, path, stub_dir)
         else:
             yield c
 
@@ -268,7 +296,7 @@ def _walk_decls(cursor, path):
 def analyze(source_text, filename="main.cpp", include_dirs=()):
     tu, tmp, stubbed, path = _parse(source_text, filename, include_dirs)
     try:
-        return _analyze_tu(tu, path, stubbed)
+        return _analyze_tu(tu, path, stubbed, tmp.name)
     finally:
         tmp.cleanup()
 
@@ -278,22 +306,58 @@ def analyze_file(path, include_dirs=()):
     return analyze(p.read_text(encoding="utf-8"), str(p), include_dirs)
 
 
-def _analyze_tu(tu, path, stubbed):
+def _module(c, ann, names):
+    name = c.spelling
+    errors, warnings = [], []
+    if c.kind == CK.CXX_METHOD:
+        errors.append(f"module '{name}' is a member function; modules must be free functions")
+    if name in names:
+        errors.append(f"module '{name}' clashes with another task or module of that name")
+    names[name] = True
+    args = list(c.get_arguments())
+    if len(args) != 1 or args[0].type.spelling != "uint8_t" or c.result_type.spelling != "int8_t":
+        errors.append(f"module '{name}' must be declared int8_t {name}(uint8_t event): it is "
+                      f"called with MUSTER_MOD_START (return < 0 to decline), MUSTER_MOD_RUN "
+                      f"(often) and MUSTER_MOD_STOP")
+    return {"name": name, **_parse_annotation(ann, name, errors, "module"),
+            "line": c.extent.start.line, "end_line": c.extent.end.line,
+            "errors": errors, "warnings": warnings}
+
+
+def _analyze_tu(tu, path, stubbed, stub_dir):
     res = _Resolver()
-    tasks, globals_, names = [], set(), {}
+    tasks, modules, globals_, names = [], [], set(), {}
     insert_line, has_gen = 0, False
+    local_headers, module_names = [], set()
 
     for inc in tu.get_includes():
         if inc.depth == 1 and Path(inc.include.name).name == "muster_gen.h":
             has_gen = True
+        f = inc.include.name
+        if Path(f).resolve() != Path(path).resolve() and _under(f, Path(path).parent) \
+                and not _under(f, stub_dir):
+            rel = Path(f).resolve().relative_to(Path(path).parent.resolve()).as_posix()
+            if rel not in local_headers:
+                local_headers.append(rel)
+            if inc.depth == 1:
+                insert_line = max(insert_line, inc.location.line)
 
-    for c in _walk_decls(tu.cursor, path):
+    for c in _walk_decls(tu.cursor, path, stub_dir):
         if c.kind == CK.VAR_DECL and not _is_const(c.type):
             globals_.add(c.spelling)
-        if c.kind not in (CK.FUNCTION_DECL, CK.CXX_METHOD) or not c.is_definition():
+        if c.kind not in (CK.FUNCTION_DECL, CK.CXX_METHOD):
             continue
-        ann = _annotation(c)
+        ann = _annotation(c) if c.is_definition() else None
         if ann is None:
+            # A module may be declared early and defined after the generated
+            # glue, where it can call the muster_<task>() stubs; count it once.
+            mann = _module_annotation(c)
+            if mann is not None and c.spelling not in module_names:
+                module_names.add(c.spelling)
+                modules.append(_module(c, mann, names))
+                if _under(c.location.file.name, Path(path).parent) and \
+                        Path(c.location.file.name).resolve() == Path(path).resolve():
+                    insert_line = max(insert_line, c.extent.end.line)
             continue
         name = c.spelling
         errors, warnings = [], []
@@ -332,19 +396,22 @@ def _analyze_tu(tu, path, stubbed):
             "errors": errors,
             "warnings": warnings,
         })
-        insert_line = max(insert_line, c.extent.end.line)
+        if Path(c.location.file.name).resolve() == Path(path).resolve():
+            insert_line = max(insert_line, c.extent.end.line)
 
     diagnostics = []
     for d in tu.diagnostics:
         if d.severity < ci.Diagnostic.Error:
             continue
-        if re.search(r"undeclared identifier 'muster_", d.spelling):
-            continue                        # generated call stubs, see codegen.py
+        if re.search(r"undeclared identifier '(muster_|MUSTER_)", d.spelling):
+            continue                        # generated call stubs and runtime constants, see codegen.py
         line = d.location.line if d.location.file else 0
         diagnostics.append(f"line {line}: {d.spelling}")
 
     return {
         "tasks": tasks,
+        "modules": modules,
+        "local_headers": local_headers,
         "globals": sorted(globals_),
         "types": res.types,
         "diagnostics": diagnostics,

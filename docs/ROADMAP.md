@@ -105,3 +105,23 @@ attempt, fewer single-board tasks, lead choice).
       *(Plus `baseline_plan` and `build_project`. `muster mcp`, stdio, protocol
       2024-11-05 … 2025-06-18; tested in-process and over a real pipe. Registered for
       Claude Code in `.mcp.json`; not yet exercised from a live client session.)*
+
+## M10 — Shared images and lead-assigned modules  (protocol v3)
+One `main.cpp`, one firmware image per board *type*; the lead decides at run time
+what each board does. See `PROTOCOL.md` (Modules, ID from a chip number) and
+DECISIONS 25–27.
+- [x] Core: `uid`-based node IDs with clash detection (`ACK ok=4`), `ASSIGN`,
+      module placement and failover, beat-driven reconciliation; compiled out on AVR.
+      *(`test_modules.c`: placement, spread, decline, board lost and rejoined, lost
+      ASSIGN healed, same-ID clash, ACK for another uid ignored. 130 host checks,
+      C99 and C++11. Mutation-checked: removing the clash check, the uid filter or
+      the beat resend each fails tests.)*
+- [x] AVR budget: minimal worker flash 8120 → 8854 B, static RAM 468 → 492 B (< 600 B).
+- [x] Toolchain: `MUSTER_MODULE(...)`, modules in local headers, `shared_images: true`,
+      one env per board type, per-port upload, module plan entries validated.
+      *(74 toolchain tests. `examples/quadruped_modules` compiles for the lead, the
+      shared ESP32 image and the Nano with `pio run`; the old `quadruped` example and
+      all five firmware example envs still build.)*
+- [ ] Hardware: MAC read on the S3 (`esp_efuse_mac_get_default`), the CAN-ID window
+      while two boards share an ID, `muster_link.set_id` on TWAI/MCP2515, module
+      failover with real boards. **Nothing here has run on hardware.**

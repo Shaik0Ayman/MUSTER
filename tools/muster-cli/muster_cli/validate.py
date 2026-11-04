@@ -1,10 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 The Muster contributors
 """The validator has the final word. Whoever proposes a plan - the baseline,
 an assistant over MCP, a hand-written file - this disposes.
 
 Errors block generation. Warnings ship with the plan and show up in the
 terminal report, the MCP result and the wiring notes.
 """
+from . import images as _images
 from .codegen import RESERVED
+
+MAX_MODULES = 8        # MUSTER_MAX_MODULES: the module mask is 8 bits
 
 
 def _plan_shape(plan, errors):
@@ -29,8 +34,15 @@ def _plan_shape(plan, errors):
 
 def _source_checks(analysis, errors, warnings):
     """Problems in the program itself; no placement can fix these."""
-    if not analysis["tasks"]:
-        errors.append("no MUSTER_TASK functions found in the source")
+    if not analysis["tasks"] and not analysis.get("modules"):
+        errors.append("no MUSTER_TASK or MUSTER_MODULE functions found in the source")
+    if len(analysis.get("modules", [])) > MAX_MODULES:
+        errors.append(f"{len(analysis['modules'])} modules, but MUSTER_MAX_MODULES is {MAX_MODULES}")
+    for m in analysis.get("modules", []):
+        errors += m.get("errors", [])
+        warnings += m.get("warnings", [])
+        if m["name"] in RESERVED:
+            errors.append(f"module '{m['name']}' clashes with a generated name; rename it")
     for t in analysis["tasks"]:
         errors += t.get("errors", [])
         warnings += t.get("warnings", [])
@@ -68,6 +80,63 @@ def _runtime_checks(analysis, boards, errors):
     if len(analysis["tasks"]) > max_tasks:
         errors.append(f"{len(analysis['tasks'])} tasks, but MUSTER_MAX_TASKS is {max_tasks}")
     return rt
+
+
+def _module_checks(plan, analysis, boards, rt, errors):
+    """Module entries: {module, boards (candidates), count}. Returns
+    {module: [board ids]} for the entries that are usable."""
+    mods = {m["name"]: m for m in analysis.get("modules", [])}
+    items = plan.get("modules", [])
+    if not isinstance(items, list):
+        errors.append("plan 'modules' must be a list of {module, boards, count}")
+        return {}
+    held, seen = {}, set()
+    for i, item in enumerate(items):
+        if (not isinstance(item, dict) or not isinstance(item.get("module"), str)
+                or not isinstance(item.get("boards"), list)
+                or not all(isinstance(b, str) for b in item["boards"])):
+            errors.append(f'module entry #{i} must be {{"module": str, "boards": [str, ...], '
+                          f'"count": int}}')
+            continue
+        name, blist = item["module"], item["boards"]
+        if name not in mods:
+            errors.append(f"plan mentions unknown module '{name}' "
+                          f"(modules: {', '.join(mods) or 'none'})")
+            continue
+        if name in seen:
+            errors.append(f"module '{name}' appears twice in the plan")
+        seen.add(name)
+        count = item.get("count", mods[name]["count"])
+        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+            errors.append(f"module '{name}' count must be a whole number >= 1")
+            count = 1
+        if not blist:
+            errors.append(f"module '{name}' is not resident on any board")
+        if len(set(blist)) != len(blist):
+            errors.append(f"module '{name}' lists a board twice")
+        for bid in blist:
+            if bid not in boards:
+                errors.append(f"module '{name}' assigned to unknown board '{bid}'")
+                continue
+            spec = boards[bid]["spec"]
+            if rt[bid].get("max_modules", 0) < 1:
+                errors.append(f"module '{name}' assigned to '{bid}', but {spec['name']} cannot "
+                              f"run modules (no room for the module bookkeeping)")
+            missing = set(mods[name]["needs"]) - set(spec["flags"])
+            if missing:
+                errors.append(f"module '{name}' needs {', '.join(sorted(missing))} "
+                              f"but '{bid}' does not have it")
+            if mods[name]["ram_kb"] > spec["ram_kb"]:
+                errors.append(f"module '{name}' needs {mods[name]['ram_kb']} KB RAM "
+                              f"but '{bid}' has {spec['ram_kb']} KB")
+        if blist and count > len(set(blist)):
+            errors.append(f"module '{name}' must run on {count} board(s) at once but only "
+                          f"{len(set(blist))} can hold it")
+        held[name] = [b for b in blist if b in boards]
+    for name in mods:
+        if name not in seen:
+            errors.append(f"module '{name}' is missing from the plan")
+    return held
 
 
 def validate(plan, analysis, inventory):
@@ -124,13 +193,34 @@ def validate(plan, analysis, inventory):
         if name not in seen:
             errors.append(f"task '{name}' is missing from the plan")
 
-    # ---- per-board RAM budget across every resident task -------------------
-    for bid, b in boards.items():
-        total = sum(tasks[a["task"]]["ram_kb"] for a in plan["assignments"]
-                    if a["task"] in tasks and bid in a["boards"])
-        if total > b["spec"]["ram_kb"]:
-            errors.append(f"board '{bid}' would need {total} KB RAM for its resident "
-                          f"tasks but has {b['spec']['ram_kb']} KB")
+    mod_info = {m["name"]: m for m in analysis.get("modules", [])}
+    mod_held = _module_checks(plan, analysis, boards, rt, errors)
+
+    # ---- RAM budget across everything an image holds ------------------------
+    # One image per board, or one per board TYPE in a shared-image project: it
+    # then holds the union of what any of its boards was given.
+    groups = _images.images(inventory, lead) if lead in boards else \
+        [{"boards": [b], "shared": False} for b in inventory]
+    for img in groups:
+        ids = [b["id"] for b in img["boards"]]
+        names = {a["task"] for a in plan["assignments"]
+                 if a["task"] in tasks and set(ids) & set(a["boards"])}
+        mnames = {n for n, held in mod_held.items() if set(ids) & set(held)}
+        total = sum(tasks[n]["ram_kb"] for n in names) + sum(mod_info[n]["ram_kb"] for n in mnames)
+        spec = img["boards"][0]["spec"]
+        if total > spec["ram_kb"]:
+            who = f"board '{ids[0]}'" if not img["shared"] else \
+                f"the shared image of {', '.join(repr(i) for i in ids)}"
+            what = "tasks and modules" if mnames else "tasks"
+            errors.append(f"{who} would need {total} KB RAM for its resident "
+                          f"{what} but has {spec['ram_kb']} KB")
+        if img["shared"] and len(ids) > 1:
+            own = [{a["task"] for a in plan["assignments"] if i in a["boards"]} |
+                   {n for n, held in mod_held.items() if i in held} for i in ids]
+            if any(o != own[0] for o in own):
+                warnings.append(f"boards {', '.join(repr(i) for i in ids)} share one image, so "
+                                f"each holds every task and module any of them was given; "
+                                f"the lead decides at run time what each one actually does")
 
     # ---- electrical rules --------------------------------------------------
     volts = {b["spec"]["logic_v"] for b in inventory}

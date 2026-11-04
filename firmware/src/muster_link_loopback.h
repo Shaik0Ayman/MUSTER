@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (c) 2026 The Muster contributors */
 /* muster_link_loopback.h - an in-memory broadcast bus for host testing.
  *
  * Behaves like CAN where it matters: every frame reaches every other node,
@@ -99,6 +101,6 @@ static void lb_attach(lb_bus *bus, lb_ctx *ctx, muster_link *link,
     bus->ports[bus->count].id = node_id;
     bus->count++;
     link->mtu = mtu; link->kbps = kbps;
-    link->send = lb_send; link->recv = lb_recv; link->ctx = ctx;
+    link->send = lb_send; link->recv = lb_recv; link->ctx = ctx; link->set_id = 0;
 }
 #endif

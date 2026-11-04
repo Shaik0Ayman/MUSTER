@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 The Muster contributors
 """MCP server: the muster toolchain as tools for an MCP client (Claude Code,
 Claude Desktop, or any other assistant). The assistant does the partitioning
 judgement the local model used to do; muster supplies facts, checks and
@@ -47,7 +49,14 @@ Never invent boards, tasks or pins: pins come only from muster's board
 database, and plans contain no pins. Paths are relative to the server's
 working directory unless absolute.
 Plan shape: {"lead": board_id, "assignments": [{"task": name, "boards":
-[board_id, ...]}], "rationale": "two or three sentences"}"""
+[board_id, ...]}], "modules": [{"module": name, "boards": [candidate ids],
+"count": n}], "rationale": "two or three sentences"}
+"modules" is only for programs with MUSTER_MODULE functions (long-running
+units, int8_t name(uint8_t event)). "boards" lists the boards that MAY run the
+module; the lead picks "count" of the live ones at run time and moves a module
+if its board is lost. With "shared_images: true" in boards.yaml all boards of a
+type that can read a chip ID share one image, so they all hold the union of the
+tasks and modules given to any of them."""
 
 PLAN_SCHEMA = {
     "type": "object",
@@ -62,6 +71,18 @@ PLAN_SCHEMA = {
                     "boards": {"type": "array", "items": {"type": "string"}},
                 },
                 "required": ["task", "boards"],
+            },
+        },
+        "modules": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "module": {"type": "string"},
+                    "boards": {"type": "array", "items": {"type": "string"}},
+                    "count": {"type": "integer", "minimum": 1},
+                },
+                "required": ["module", "boards"],
             },
         },
         "rationale": {"type": "string"},

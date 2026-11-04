@@ -23,6 +23,9 @@
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define constrain(x, lo, hi) ((x) < (lo) ? (lo) : ((x) > (hi) ? (hi) : (x)))
 #define F(s) (s)
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 13
+#endif
 void pinMode(uint8_t, uint8_t); void digitalWrite(uint8_t, uint8_t);
 int digitalRead(uint8_t); int analogRead(uint8_t); void analogWrite(uint8_t, int);
 unsigned long millis(void); unsigned long micros(void);
