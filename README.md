@@ -445,6 +445,6 @@ description, not legal advice.
 
 ## Authors
 
-Shaik Ayman Hameed Baig and Lahari, Department of Electronics and Communication
+Shaik Ayman Hameed Baig, Abhinav Senthil and Lahari, Department of Electronics and Communication
 Engineering, SRMIST, built as the project for *21ECC301P: Microprocessor,
 Microcontroller and Interfacing Techniques*.
