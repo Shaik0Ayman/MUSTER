@@ -55,6 +55,7 @@ int main(void)
     muster_w_init(&w, a, sizeof a); trio_encode_args(&w, 32, TRIO_TERMS);
     n = trio_wave_tr(a, w.n, out, sizeof out);
     CHECK(n > 0 && n < 40, "the result is small enough for one radio frame");
+    CHECK(n == (int16_t)TRIO_RESULT_BYTES, "the result is exactly TRIO_RESULT_BYTES long");
     CHECK(trio_get_result(out, (uint16_t)n, &r) == 0, "it decodes");
     CHECK(r.node == 42 && r.chip == TRIO_CHIP_ESP32 && r.cpu_mhz == 240 && r.uid == 0xDEADBEEFul &&
           r.free_heap == 200000 && r.uptime_ms == 123456, "the board's vital signs arrive intact");

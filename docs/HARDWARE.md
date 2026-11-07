@@ -61,6 +61,28 @@ These are the S3's native SPI2 (FSPI) IO-MUX pins, already in `boards.yaml`
 (`spi` and `attention_pin` of `esp32-s3-devkitc-1`); confirm against your DevKit
 pinout. Wires under ~15 cm; start at 4 MHz.
 
+## ESP-NOW (ESP32 boards, no wiring)
+No transceivers and no wires between boards; each board only needs power. Details
+of the link are in [`LINKS.md`](LINKS.md); a complete setup is the
+[`trio`](../firmware/examples/trio/README.md) example, which has run on an ESP32-C6
+lead and two ESP32 DevKits ([results](TESTING.md#hardware-results)).
+* **One channel for everyone.** All boards must use the same WiFi channel
+  (`TRIO_CHANNEL` in the example). A lead running an access point starts it on that
+  channel *before* starting ESP-NOW.
+* **Check the radio first.** `firmware/examples/trio/node_selftest` lists the other
+  boards each one can hear, with no Muster involved. Don't go further until every
+  board hears every other.
+* **Range and placement.** Keep boards within a few metres for a first test, and away
+  from metal enclosures.
+* **Power.** WiFi transmit bursts draw several hundred mA; use a decent USB cable and
+  port, or a powered hub, if a board resets when the radio starts.
+
+## UART (any two boards with a serial port)
+Cross TX→RX and RX→TX, share ground, and use the same baud rate on both ends. A
+5 V board (Nano) talking to a 3.3 V board (ESP32) needs a level shifter, or at least
+a divider on the 3.3 V board's RX. One cable per pair of boards. The link has worked on real boards
+([results](TESTING.md#hardware-results)); the boards and baud rate of that test were not recorded.
+
 ## Bring-up order
 1. Two ESP32-S3s on CAN, no Muster: send/receive raw TWAI frames.
 2. Add the Nano + MCP2515: raw frames between all three.

@@ -11,9 +11,30 @@ TESTS    = test_bus test_core test_framing test_loss test_modules test_multilink
 AVRFLAGS = -mmcu=atmega328p -std=c99 -Os -Wall -Wextra -Werror -I$(SRC) \
            -ffunction-sections -fdata-sections
 
-.PHONY: test cpp avr clean
-test: $(TESTS)
+.PHONY: test cpp avr clean guards check-copies
+test: $(TESTS) guards check-copies
 	@for t in $(TESTS); do ./$$t || exit 1; done
+
+# Each link must compile on boards it does not drive: an Arduino AVR build
+# (ARDUINO set, no ESP32) and a plain C build. A guard that leaks platform
+# headers fails here instead of on someone's Nano.
+LINKS = muster_link_loopback.h muster_link_uart.h muster_link_espnow.h muster_link_spi.h
+guards: $(HDRS)
+	@for h in $(LINKS); do \
+	  printf '#define MUSTER_IMPLEMENTATION\n#include "%s"\nint main(void){return 0;}\n' $$h | \
+	    $(CC) $(CFLAGS) -DARDUINO=10819 -Wno-unused-function -x c - -lm -o /dev/null || exit 1; \
+	done; echo "link headers compile without their platform (as on an Arduino AVR build)"
+
+# The trio sketch carries copies of the runtime because the Arduino IDE only
+# compiles files inside the sketch folder. They must not drift from src/.
+TRIO = ../examples/trio/muster_trio
+check-copies:
+	@for f in $(notdir $(wildcard $(SRC)/*.h)); do \
+	  cmp -s $(SRC)/$$f $(TRIO)/$$f || { echo "$(TRIO)/$$f differs from src/: run make -C firmware/test sync-copies"; exit 1; }; \
+	done; echo "trio sketch copies match firmware/src"
+
+sync-copies:
+	cp $(SRC)/*.h $(TRIO)/
 
 test_%: test_%.c $(HDRS)
 	$(CC) $(CFLAGS) $< -lm -o $@

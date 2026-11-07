@@ -5,7 +5,8 @@ strict; they exist because each one protects a real failure mode. Read this once
 then the spec for the area you are touching.
 
 ## Good first contributions
-* **Hardware results.** The CAN and SPI drivers have only run on simulated buses.
+* **Hardware results.** The CAN and SPI links have only run in simulation; UART and
+  ESP-NOW have run on boards but have no latency measurements yet.
   Follow the bring-up order in [`docs/HARDWARE.md`](docs/HARDWARE.md) and open a
   *Hardware report* issue, whether it worked or not.
 * **A new board** in `tools/muster-cli/muster_cli/db/boards.yaml`, backed by its
@@ -23,7 +24,7 @@ set `MUSTER_HOST_CXX=wsl` so the toolchain tests compile their host round trip t
 
 ## Checks every change must pass
 ```bash
-make -C firmware/test            # strict C99: -Wall -Wextra -Wpedantic -Werror
+make -C firmware/test            # strict C99: -Wall -Wextra -Wpedantic -Werror (also link guards + sketch copies)
 make -C firmware/test cpp        # the same tests as C++11 (Arduino compiles as C++)
 make -C firmware/test avr        # after core changes: ATmega328P flash/RAM, needs avr-gcc
 pytest tools/muster-cli          # toolchain tests
@@ -69,6 +70,8 @@ Intentional limits (at-least-once across boards, hub and spoke, tasks must not c
 * **Generated code** uses the `mg_` / `muster_` prefixes and the fixed-width rules above.
 * **Commits:** `area: what changed`, for example `core: dedupe repeated CALLs`.
 * **New source files** start with the SPDX header used in the existing ones.
+* **The `trio` sketch** carries copies of `firmware/src/*.h` (the Arduino IDE only builds
+  files in the sketch folder). After changing a header, run `make -C firmware/test sync-copies`.
 
 ## Specs to read first
 | Area | Read |
@@ -76,9 +79,13 @@ Intentional limits (at-least-once across boards, hub and spoke, tasks must not c
 | Core runtime and message flow | `docs/ARCHITECTURE.md`, `docs/PROTOCOL.md` |
 | CAN + SPI together | `docs/MULTILINK_SPEC.md` |
 | SPI transport | `docs/SPI_LINK_SPEC.md` |
+| Any transport (UART, ESP-NOW, writing a new link) | `docs/LINKS.md` |
 | Wiring, pins, electrical | `docs/HARDWARE.md` |
 | Why things are as they are | `docs/DECISIONS.md` (add new decisions at the bottom) |
 | Testing and benchmarks | `docs/TESTING.md` |
+
+## Conduct
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License of contributions
 Muster is licensed under **GPL-3.0-only** (see [`LICENSE`](LICENSE)). By opening a pull

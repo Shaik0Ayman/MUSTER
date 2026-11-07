@@ -12,7 +12,8 @@
  *
  * Point to point: give each cable its own link and node `peer`. A lead with two
  * workers attaches two links (set MUSTER_MAX_LINKS 2 before including muster.h).
- * Not verified on hardware; host tests only.
+ * Hardware: worked between real boards (2026-11-07); no latency measured yet.
+ * See docs/TESTING.md, "Hardware results".
  */
 #ifndef MUSTER_LINK_UART_H
 #define MUSTER_LINK_UART_H
@@ -22,6 +23,10 @@
 #define MUSTER_UART_MTU 32 /* <= MUSTER_MAX_FRAME */
 #endif
 #define MUSTER_UART_SYNC 0x7Eu
+/* len travels in one byte and the receiver counts len + 2 bytes in a uint8_t. */
+#if MUSTER_UART_MTU > 253 || MUSTER_UART_MTU > MUSTER_MAX_FRAME
+#error "MUSTER_UART_MTU must be <= 253 and <= MUSTER_MAX_FRAME"
+#endif
 
 typedef struct
 {

@@ -5,27 +5,30 @@
 **Write one program. Muster splits it across your microcontroller boards.**
 
 A framework for multi-MCU embedded systems: boards of different families
-(8-bit AVR, 32-bit ESP32) share work over CAN and SPI. One **lead** board
-decides, live, who runs what. **Workers** join, execute and report.
+(8-bit AVR, 32-bit ESP32) share work over **CAN, SPI, UART or ESP-NOW**. One
+**lead** board decides, live, who runs what. **Workers** join, execute and report.
 
 [![License: GPL v3](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 ![C99 core](https://img.shields.io/badge/core-C99%20%2F%20C%2B%2B11-informational)
-![Boards](https://img.shields.io/badge/boards-ESP32--S3%20%C2%B7%20ATmega328P-success)
+![Boards](https://img.shields.io/badge/boards-ESP32%20%C2%B7%20ESP32--S3%20%C2%B7%20ESP32--C6%20%C2%B7%20ATmega328P-success)
+![Links](https://img.shields.io/badge/links-CAN%20%C2%B7%20SPI%20%C2%B7%20UART%20%C2%B7%20ESP--NOW-informational)
 
 </div>
 
 > [!WARNING]
-> **Status: verified in simulation, not yet on hardware.** The runtime is tested on
-> simulated buses (160 host checks, C99 and C++11) and the generated firmware
-> compiles for every target. The CAN and SPI drivers compile for their boards but
-> **have not been run on real hardware yet**. See [Status](#status) for exactly what
-> is and is not proven.
+> **Status: UART and ESP-NOW run on hardware; CAN and SPI so far only in simulation.**
+> Every transport is tested on simulated links (193 host checks in 12 binaries, C99
+> and C++11). On real boards, the ESP-NOW [`trio`](firmware/examples/trio) demo (an
+> ESP32-C6 lead and two ESP32 workers) joined, balanced calls, failed over and rejoined,
+> and the UART link worked. The CAN and SPI drivers compile but **have not been run on
+> real hardware yet**. See [Status](#status) for exactly what is and is not proven.
 
 ---
 
 ## Contents
 
 [Why Muster](#why-muster) · [How it works](#how-it-works) · [Quick start](#quick-start) ·
+[Try it on real boards](#try-it-on-real-boards-esp-now-no-wiring) · [Install the runtime](#install-the-runtime-as-a-library) ·
 [Walkthrough](#walkthrough-one-program-four-boards) · [Simulate it](#simulate-it-no-hardware) · [Tasks and modules](#tasks-and-modules) ·
 [Command line](#command-line) · [Use it from an AI assistant](#use-it-from-an-ai-assistant-mcp) ·
 [Use the runtime directly](#use-the-runtime-directly-c-api) · [Configuration](#configuration) ·
@@ -66,6 +69,9 @@ flowchart LR
     L <-. "optional SPI accelerator<br/>(point to point)" .-> W1
 ```
 
+* **Any link, or several at once.** CAN (on-chip TWAI or an MCP2515), SPI, UART and
+  ESP-NOW all look the same to the runtime. A board can hold up to 8 links; unicast
+  goes over the fastest live one. See [`docs/LINKS.md`](docs/LINKS.md).
 * **Code is resident, placement is live.** An 8-bit AVR cannot load code at run
   time, so each board holds the tasks it may run; the lead chooses among the live
   boards that hold the task.
@@ -119,6 +125,44 @@ muster build                     # compile it for every board
 > On Windows, use WSL for `make`/`gcc` and run Python natively, or set
 > `MUSTER_HOST_CXX=wsl` so the toolchain tests compile their host round trip
 > inside WSL.
+
+## Try it on real boards (ESP-NOW, no wiring)
+
+The quickest hardware setup is [`firmware/examples/trio`](firmware/examples/trio):
+three ESP32 boards and no wires between them, just power.
+
+* An **ESP32-C6** is the lead. It places calls and serves a live dashboard from its own
+  WiFi access point (`muster-trio`, http://192.168.4.1/).
+* Two **ESP32 DevKits** are workers running the same image. Each computes a Fourier
+  series and drives a PWM pin with the result.
+* Switch a worker off and the other takes the calls; switch it back on and it rejoins.
+
+```bash
+cd firmware/examples/trio
+pio run -e worker_esp32 -t upload --upload-port COMx   # each DevKit
+pio run -e lead_c6      -t upload --upload-port COMy   # the C6 (PlatformIO Core >= 6.2.0)
+```
+
+This ran on hardware on 2026-11-07: join, placement, failover and rejoin all worked,
+and a worker's average compute time per call was about 900 µs. Radio round-trip latency
+has not been measured yet; see [the results](docs/TESTING.md#hardware-results). No C6?
+`-e lead_esp32dev` runs the lead role on a third classic ESP32.
+
+## Install the runtime as a library
+
+The runtime is the folder [`firmware/`](firmware): headers only, with
+`library.properties` (Arduino) and `library.json` (PlatformIO). It is **not yet in the
+Arduino Library Manager or the PlatformIO Registry**, so install it from this
+repository:
+
+* **Arduino IDE:** copy `firmware/` to your sketchbook's `libraries/Muster` folder
+  (e.g. `Documents/Arduino/libraries/Muster`) and restart the IDE.
+* **PlatformIO:** point `lib_deps` at your checkout, as the examples do:
+  `lib_deps = symlink://path/to/MUSTER/firmware`.
+
+Then `#define MUSTER_IMPLEMENTATION` in exactly one source file before
+`#include "muster.h"`, and include the link headers you use (see
+[Use the runtime directly](#use-the-runtime-directly-c-api)).
 
 ## Walkthrough: one program, four boards
 
@@ -322,9 +366,15 @@ int8_t st = muster_call(&M, TASK_DOUBLE, args, w.n, out, sizeof out, &n, /*timeo
 // Non-blocking: muster_call_async() then muster_result() until it stops returning MUSTER_PENDING.
 ```
 
+Other links attach the same way: `muster_mcp2515_begin()` (Nano CAN),
+`muster_spi_master_begin()` / `muster_spi_slave_begin()`, `muster_uart_attach()` and
+`muster_espnow_begin()`. Add more than one with `muster_add_link()`. All of them are
+described in [`docs/LINKS.md`](docs/LINKS.md).
+
 Working examples: [`firmware/examples`](firmware/examples) (`lead_esp32`,
-`worker_esp32`, `worker_nano`). **Never** send raw structs or native `int`/`double`
-on the wire; use `muster_put_*` / `muster_get_*`.
+`worker_esp32`, `worker_nano` on CAN, `trio` on ESP-NOW, `sim_cluster` in a simulator).
+**Never** send raw structs or native `int`/`double` on the wire; use
+`muster_put_*` / `muster_get_*`.
 
 ## Configuration
 
@@ -365,20 +415,31 @@ reassembled per link; a pulled SPI cable falls back to CAN.
 * **Hub and spoke:** worker→worker calls go through the lead.
 * **The lead must know every task's cost** (the generated setup does this for you).
 * **Max 8 nodes**, 32 task IDs, 8 modules, 8 links; 8-bit call IDs. No checksum in
-  the core: CAN has hardware CRC and the SPI link adds CRC-16.
+  the core: CAN has hardware CRC, the SPI and UART links add CRC-16, and ESP-NOW frames
+  carry the 802.11 checksum.
 * **Moving a module loses its state.** Placement is not migration.
-* **No authentication or encryption on the bus.** Anything on the CAN bus can speak
-  Muster. Do not use it where that matters without adding your own protection.
+* **No authentication or encryption on any link.** Anything on the CAN bus, and any
+  ESP-NOW radio in range on the same channel, can speak Muster. Do not use it where that matters without adding your own protection.
   Muster is not a safety-certified system.
 
 Why each of these is the way it is: [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ## Supported boards
 
+**In the toolchain's board database** (`muster plan` can generate projects for these):
+
 | Board type | CPU | RAM | CAN | Can run |
 |---|---|---|---|---|
 | `esp32-s3-devkitc-1` | 2 × Xtensa 240 MHz, FPU | 512 KB | on-chip TWAI + SN65HVD230 | tasks, modules, can lead |
 | `nanoatmega328` | ATmega328P 16 MHz | 2 KB | MCP2515 + TJA1050 module | tasks (no FPU, no modules) |
+
+Generated projects use CAN (TWAI or MCP2515). For another transport, build with
+`MUSTER_GEN_LINK_EXTERNAL` and provide `muster_link *muster_gen_external_link(void)`.
+
+**Used with the runtime directly**, in the hand-written [`trio`](firmware/examples/trio)
+example: the classic **ESP32 DevKit** (worker, or lead with `lead_esp32dev`) and the
+**ESP32-C6** (lead; it has no FPU). These aren't in the board database yet, so
+`muster plan` can't target them.
 
 Pins and electrical facts come **only** from
 [`db/boards.yaml`](tools/muster-cli/muster_cli/db/boards.yaml). To add a board, add a
@@ -395,14 +456,17 @@ datasheet-backed entry there (never guess a pinout), then see
 | M10 Shared images + lead-assigned modules (protocol v3) | ✅ simulated + compiles; **not run on boards** |
 | M4 CAN hardware bring-up | ⬜ drivers compile; **unverified on hardware** |
 | M5 SPI hardware | ⬜ drivers compile; **unverified on hardware** |
+| UART + ESP-NOW links | ✅ simulated, and **run on hardware** (2026-11-07): ESP-NOW trio with failover; UART worked ([results](docs/TESTING.md#hardware-results)) |
 | M8 Telemetry and dashboard | ⬜ not built |
 | M7 Local LLM evaluation | superseded by MCP (decision 21) |
 
-**Measured:** 160 host checks pass in C99 and C++11 (failover, duplicate suppression,
-5 % frame loss, CAN + SPI routing, SPI bit-flip recovery, modules, ID clashes);
+**Measured:** 193 host checks pass in C99 and C++11 (failover, duplicate suppression,
+5 % frame loss, CAN + SPI routing, SPI bit-flip recovery, UART resync, ESP-NOW at 10 %
+loss, modules, ID clashes);
 74 toolchain tests; a minimal ATmega328P worker is **8.9 KB flash and 492 B static
-RAM** (`make -C firmware/test avr`). **Not measured yet:** real bus latency, bus
-load, failover time, the MAC read on the ESP32-S3, or the CAN behaviour while two
+RAM** (`make -C firmware/test avr`). On hardware (ESP-NOW `trio`): about 900 µs average
+compute time per call on an ESP32 worker. **Not measured yet:** real link latency
+(CAN, UART or ESP-NOW round trip), bus load, failover time, the MAC read on the ESP32-S3, or the CAN behaviour while two
 boards briefly share an ID. Full acceptance criteria: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Repository layout
@@ -410,15 +474,17 @@ boards briefly share an ID. Full acceptance criteria: [`docs/ROADMAP.md`](docs/R
 ```text
 firmware/
   src/muster.h              the whole runtime: one C99 header
-  src/muster_link_*.h       transports: loopback (tests), twai, mcp2515, spi, uart (any byte stream), espnow (ESP32 radio, no CAN needed)
+  src/muster_link_*.h       transports: twai, mcp2515 (CAN) · spi · uart · espnow · loopback (tests)
+  library.properties/.json  Arduino and PlatformIO library manifests
   test/                     host tests, simulated buses, `make` targets
-  examples/                 PlatformIO projects: lead_esp32, worker_esp32, worker_nano
+  examples/                 PlatformIO projects: lead_esp32, worker_esp32, worker_nano (CAN/SPI),
+                            sim_cluster (Wokwi), trio (ESP-NOW + dashboard); see examples/README.md
 tools/muster-cli/
   muster_cli/               analyse · partition · validate · codegen · pio · wiring · mcp
   muster_cli/db/boards.yaml the only source of pins and board facts
   examples/                 quadruped, quadruped_modules
   tests/                    toolchain tests
-docs/                       protocol, architecture, specs, hardware, decisions, roadmap
+docs/                       protocol, architecture, links, specs, hardware, testing, decisions, roadmap
 ```
 
 ## Documentation
@@ -428,15 +494,18 @@ docs/                       protocol, architecture, specs, hardware, decisions, 
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | understand the layers, the contracts and the memory model |
 | [`docs/PROTOCOL.md`](docs/PROTOCOL.md) | see the wire format (version 3) and every message flow |
 | [`docs/MULTILINK_SPEC.md`](docs/MULTILINK_SPEC.md), [`docs/SPI_LINK_SPEC.md`](docs/SPI_LINK_SPEC.md) | use CAN and SPI together |
+| [`docs/LINKS.md`](docs/LINKS.md) | pick and attach a transport: CAN, SPI, UART, ESP-NOW |
 | [`docs/HARDWARE.md`](docs/HARDWARE.md) | wire boards and bring up a bus |
+| [`firmware/examples/README.md`](firmware/examples/README.md) | find an example to start from |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | learn why things are the way they are |
 | [`docs/TESTING.md`](docs/TESTING.md) | see what is tested and how |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | see milestones and their acceptance criteria |
 | [`CHANGELOG.md`](CHANGELOG.md) | see what changed |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), [`SECURITY.md`](SECURITY.md) | contribute, or report a problem |
 
 ## Contributing
 
-Contributions are welcome, especially **hardware bring-up results** (M4/M5), new
+Contributions are welcome, especially **hardware bring-up results** (M4/M5, UART, ESP-NOW), new
 board entries, and bug reports with a failing host test. Please read
 [`CONTRIBUTING.md`](CONTRIBUTING.md) first: it lists the hard rules (no dynamic
 allocation, fixed-width wire types, the AVR memory budget) and the checks every

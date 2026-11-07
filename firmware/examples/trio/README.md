@@ -12,8 +12,14 @@
 ```
 
 No CAN transceivers, no wires between boards: Muster runs over **ESP-NOW**
-(`firmware/src/muster_link_espnow.h`), a broadcast radio that behaves like a shared bus.
+([`firmware/src/muster_link_espnow.h`](../../src/muster_link_espnow.h), described in
+[`docs/LINKS.md`](../../../docs/LINKS.md)), a broadcast radio that behaves like a shared bus.
 Just power the three boards.
+
+> **Status: run on hardware** (2026-11-07, ESP32-C6 lead + two ESP32 DevKits). Join,
+> placement, failover and rejoin worked, and the dashboard showed about 900 µs average
+> compute time per call on a worker. Radio latency hasn't been measured yet. Details are in
+> [What is and is not verified](#what-is-and-is-not-verified).
 
 **What happens.** The lead keeps three calls in flight to `wave(step, 256)`, a 256-term
 Fourier series computed in floating point. Muster's placement decides which worker runs
@@ -95,13 +101,20 @@ Verified (2026-11-04):
 * `make -C firmware/test` and `… cpp`: `test_espnow_link` (ring, packets, a lead + two workers on a
   lossy broadcast medium, a node-ID change, a worker leaving) and `test_trio_task` (the series
   against its closed form, result encoding).
-* `worker_esp32`, `lead_esp32dev` and `selftest_esp32` **compile** (Arduino-ESP32 2.0.17).
+* `worker_esp32`, `lead_esp32dev` and `selftest_esp32` **compile** (Arduino-ESP32 2.0.17; rechecked 2026-11-07).
 * The dashboard renders and updates in Chrome, light and dark, driven by the mock.
 
-**Not verified:** anything on real boards. The ESP-NOW glue, the SoftAP + ESP-NOW coexistence on the
-lead, the PWM output, the real dashboard served by the C6, and every timing in this file are untested.
-The C6 build (`lead_c6`, `selftest_c6`) has **not been compiled yet**: it needs the pioarduino platform
-(Arduino-ESP32 3.x), which is not installed on the dev machine. If ESP-NOW from the lead's WiFi
+**Run on hardware (2026-11-07, ESP32-C6 lead + two ESP32 DevKits):** the workers joined, the lead
+placed calls on both, the dashboard was served by the C6 from its access point while ESP-NOW ran (so
+SoftAP + ESP-NOW coexist on the lead), a worker that was switched off was declared lost and the other
+took the calls, and it rejoined when powered back. The dashboard's average task time per worker was
+**≈ 900 µs**. That is the worker's compute time for `wave(step, 256)` (`busy_us`), not the radio
+round trip. Details: [`docs/TESTING.md`](../../../docs/TESTING.md#hardware-results).
+
+**Not verified:** the radio round-trip latency and failover time (not measured), the PWM output,
+`node_selftest`, `-DTRIO_RGB_LED`, and the other timings in this file. On the machine used for
+development, `lead_c6` and `selftest_c6` don't build with PlatformIO Core 6.2.0.post1: the pioarduino
+platform needs 6.2.0 or newer (`pio upgrade`). CI installs a current PlatformIO and builds them. If ESP-NOW from the lead's WiFi
 AP interface misbehaves, `lead_esp32dev` runs the lead role on a classic ESP32 as a fallback.
 
 Things to know:
@@ -110,4 +123,4 @@ Things to know:
 * Tasks run inside `muster_poll()` and the web server shares the lead's loop; both are short here.
   A long page request could delay a heartbeat.
 * A call that moves to another board after its first board went silent can run twice (at-least-once,
-  see `CLAUDE.md`); `wave` is a pure function, so that is harmless.
+  see *Guarantees and limits* in the top-level README); `wave` is a pure function, so that is harmless.

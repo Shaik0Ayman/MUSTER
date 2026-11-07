@@ -1,8 +1,8 @@
 {
   "name": "muster",
   "version": "0.1.0",
-  "description": "A framework for multi-MCU embedded systems: share tasks across heterogeneous boards over CAN and SPI.",
-  "keywords": ["can", "spi", "distributed", "multi-mcu", "esp32", "avr"],
+  "description": "A framework for multi-MCU embedded systems: share tasks across heterogeneous boards over CAN, SPI, UART and ESP-NOW.",
+  "keywords": ["can", "spi", "uart", "esp-now", "distributed", "multi-mcu", "esp32", "avr"],
   "authors": [{ "name": "Shaik Ayman Hameed Baig" }, { "name": "Lahari" }],
   "license": "GPL-3.0-only",
   "repository": { "type": "git", "url": "https://github.com/Shaik0Ayman/MUSTER.git" },

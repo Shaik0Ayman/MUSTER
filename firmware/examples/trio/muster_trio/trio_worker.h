@@ -2,7 +2,7 @@
 // trio_worker.h - the worker role. Holds the `wave` task; has no idea who the
 // lead is or which other boards exist. The same image runs on both DevKits:
 // each hashes its node ID from its own chip MAC (muster_set_uid).
-// NOT yet run on hardware.
+// Ran on two ESP32 DevKits 2026-11-07.
 #pragma once
 
 static muster_t     M;

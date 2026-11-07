@@ -29,7 +29,7 @@
             reassembly slots keyed by (link, source)
  ─────────────────────────────────────────────────────────────
  links      muster_link { mtu, kbps, send(), recv(), ctx }  × MUSTER_MAX_LINKS
- transport  TWAI (ESP32 CAN) · MCP2515 (Nano CAN) · SPI (ESP32-S3) · UART (any byte stream) · loopback (tests)
+ transport  TWAI (ESP32 CAN) · MCP2515 (Nano CAN) · SPI (ESP32-S3) · UART (any byte stream) · ESP-NOW (ESP32 radio) · loopback (tests) — see LINKS.md
 ```
 
 ## Modules and shared images

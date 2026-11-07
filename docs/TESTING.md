@@ -21,6 +21,31 @@ and a port can be "unplugged".
 | `test_spi_frame` | SPI packet framing and CRC |
 | `test_spi_link` | SPI queues, master/slave logic, two boards over the in-memory wire, bit flips, cable pull |
 
+`make -C firmware/test` also runs two build checks before the binaries:
+
+* `guards`: every portable link header compiles as plain C with `ARDUINO` defined and
+  no ESP32, the way an Arduino AVR build sees it, so platform code can't leak into a
+  board that doesn't drive it.
+* `check-copies`: the headers inside `examples/trio/muster_trio/` are identical to
+  `src/` (`make sync-copies` refreshes them).
+
+## Hardware results
+
+Reported by the maintainers. Each row says what was observed and, just as
+important, what wasn't measured.
+
+| Date | Link | Boards | Observed | Not measured / not recorded |
+|---|---|---|---|---|
+| 2026-11-07 | ESP-NOW | ESP32-C6 (lead, `trio`) + 2 × ESP32 DevKit (workers) | workers joined; calls were placed on both workers; dashboard served by the C6 over its own access point while ESP-NOW ran; a worker switched off was declared lost and the other took the calls; it rejoined when powered back. Average task time per call on a worker: **≈ 900 µs** (dashboard `avg`, the worker's `busy_us` for `wave(step, 256)`). | radio round-trip latency (call → result), failover time, packet loss rate, PWM output, `node_selftest`, how the C6 image was built |
+| 2026-11-07 | UART | not recorded | the link worked between real boards | boards, baud rate, latency |
+
+**What ≈ 900 µs is.** `busy_us` is measured on the worker around the computation only
+(`trio_wave_tr`), so it is the cost of 256 `sinf` terms on a 240 MHz ESP32. It does
+not include the radio. A call's end-to-end latency is that plus two ESP-NOW transfers
+plus queueing on both sides. To measure it, time `muster_call()` on the lead with
+`micros()`, or toggle a GPIO at call and result and read it with a logic analyser,
+then add a row here.
+
 `rig.h` holds the shared rig: fake clock, `CHECK`, `rig_step()` (polls every
 board once per ms) and `rig_wait()`. A task that should "take time" calls
 `rig_step()` itself: the other boards keep running while its own board is busy.

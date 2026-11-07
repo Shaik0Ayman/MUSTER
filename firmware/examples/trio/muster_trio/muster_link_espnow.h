@@ -21,8 +21,10 @@
  * locks); muster_poll() pops. The core stays single-threaded.
  *
  * The ring and packet code at the top is plain C and is tested on the host
- * (test_espnow_link.c). The radio glue below it compiles only for ESP32
- * targets and is NOT verified on hardware.
+ * (test_espnow_link.c). The radio glue below it compiles only for Arduino-ESP32.
+ * Hardware: the trio example ran on an ESP32-C6 lead + two ESP32 DevKits
+ * (2026-11-07): join, calls, failover and rejoin worked. Radio round-trip
+ * latency has not been measured. See docs/TESTING.md, "Hardware results".
  */
 #ifndef MUSTER_LINK_ESPNOW_H
 #define MUSTER_LINK_ESPNOW_H
@@ -32,7 +34,15 @@
 #define MUSTER_ESPNOW_MTU 64 /* Muster frame bytes; <= MUSTER_MAX_FRAME, packet = 1 + this */
 #endif
 #ifndef MUSTER_ESPNOW_RING
-#define MUSTER_ESPNOW_RING 16 /* received frames waiting for muster_poll(); power of 2 */
+#define MUSTER_ESPNOW_RING 16 /* received frames waiting for muster_poll() */
+#endif
+/* The slot length is a uint8_t, an ESP-NOW packet carries at most 250 bytes
+ * (1 of them our source ID), and the core never builds a frame above MAX_FRAME. */
+#if MUSTER_ESPNOW_MTU > 249 || MUSTER_ESPNOW_MTU > MUSTER_MAX_FRAME
+#error "MUSTER_ESPNOW_MTU must be <= 249 and <= MUSTER_MAX_FRAME"
+#endif
+#if MUSTER_ESPNOW_RING < 2 || MUSTER_ESPNOW_RING > 255
+#error "MUSTER_ESPNOW_RING must be 2..255 (head/tail are uint8_t)"
 #endif
 
 typedef struct
@@ -117,7 +127,9 @@ static uint16_t mespnow_recv(muster_link *l, uint8_t *src, uint8_t *f, uint16_t 
 }
 
 /* ------------------------------------------------------------ radio glue */
-#if defined(ARDUINO) || defined(ESP_PLATFORM)
+/* Arduino-ESP32 only: it needs WiFi.h. Plain ARDUINO is also set on AVR, and
+ * ESP_PLATFORM on ESP-IDF builds without Arduino, so neither is enough alone. */
+#if defined(ARDUINO_ARCH_ESP32)
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>

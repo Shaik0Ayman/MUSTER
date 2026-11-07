@@ -17,6 +17,9 @@ node is doing and two buttons pull and replug the workers' cables.
   lose its state).
 
 ## What it does *not* show
+For a demo on real boards with no wiring, see [`../trio`](../trio/README.md) (ESP-NOW,
+run on hardware). All the examples are listed in [`../README.md`](../README.md).
+
 It does not exercise the CAN controller, the transceivers, the wiring or real bus
 timing. Wokwi simulates only **one firmware per project** and lists the ESP32-S3's CAN
 controller (TWAI) as only partially implemented, so a faithful two-ESP32 CAN simulation

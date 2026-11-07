@@ -7,7 +7,7 @@
 //     board's own vital signs) and from its node table (alive / lost).
 // The lead also holds the task, so if every worker is gone it computes alone
 // (placement penalises it, so it only wins when nobody else can).
-// NOT yet run on hardware.
+// Ran on an ESP32-C6 2026-11-07: dashboard, placement and failover worked.
 #pragma once
 #include <WebServer.h>
 #include "dashboard.h"
@@ -94,12 +94,17 @@ static const char *board_name(const Board &b, int idx, char *out, size_t cap) {
     return out;
 }
 
+// snprintf returns the length it wanted, not what it wrote: clamp so a full
+// buffer truncates the JSON instead of `sizeof js - n` wrapping round.
+#define JS_APPEND(...) do { int k_ = snprintf(js + n, sizeof js - n, __VA_ARGS__); \
+    if (k_ > 0) n = (n + (size_t)k_ < sizeof js) ? n + (size_t)k_ : sizeof js - 1; } while (0)
+
 static void serve_state(void) {
     static char js[4096];
     size_t n = 0;
     uint32_t now = millis();
     uint8_t alive = muster_alive_count(&M);
-    n += snprintf(js + n, sizeof js - n,
+    JS_APPEND(
         "{\"t\":%lu,\"ch\":%d,\"ssid\":\"%s\",\"alive\":%u,\"ok\":%lu,\"failed\":%lu,\"cps\":%.1f,\"step\":%u,"
         "\"radio\":{\"sent\":%lu,\"txfail\":%lu,\"rxdrop\":%lu},\"boards\":[",
         (unsigned long)(now - started_at), TRIO_CHANNEL, TRIO_AP_SSID, alive,
@@ -116,7 +121,7 @@ static void serve_state(void) {
         uint32_t heap = b.lead ? ESP.getFreeHeap() : b.last.free_heap;
         uint32_t up   = b.lead ? now : b.last.uptime_ms;
         uint32_t tasks = b.lead ? trio_tasks_done : b.last.tasks;
-        n += snprintf(js + n, sizeof js - n,
+        JS_APPEND(
             "%s{\"slot\":%d,\"name\":\"%s\",\"lead\":%d,\"node\":%u,\"uid\":\"%08lX\",\"chip\":%u,\"alive\":%d,"
             "\"cpu\":%u,\"heap\":%lu,\"up\":%lu,\"tasks\":%lu,\"calls\":%lu,\"duty\":%u,\"val\":%.3f,"
             "\"busy\":%lu,\"avg\":%.0f,\"age\":%ld,\"inflight\":%u,\"queued\":%lu}",
@@ -129,14 +134,14 @@ static void serve_state(void) {
             b.calls ? (long)(now - b.last_ms) : -1L,
             nd ? nd->inflight : 0, nd ? (unsigned long)nd->queued : 0UL);
     }
-    n += snprintf(js + n, sizeof js - n, "],\"log\":[");
+    JS_APPEND("],\"log\":[");
     uint8_t shown = log_n < TRIO_LOG ? log_n : TRIO_LOG;
     for (uint8_t k = 0; k < shown; k++) {                      // oldest first
         const LogLine &l = logbuf[(log_n - shown + k) % TRIO_LOG];
-        n += snprintf(js + n, sizeof js - n, "%s{\"t\":%lu,\"m\":\"%s\"}", k ? "," : "",
+        JS_APPEND("%s{\"t\":%lu,\"m\":\"%s\"}", k ? "," : "",
                       (unsigned long)(l.t - started_at), l.s);
     }
-    snprintf(js + n, sizeof js - n, "]}");
+    JS_APPEND("]}");
     server.sendHeader("Cache-Control", "no-store");
     server.send(200, "application/json", js);
 }
@@ -185,6 +190,11 @@ static void issue_and_collect(void) {
         if (st == MUSTER_OK) { calls_ok++; take_result(buf, n); }
         else { calls_failed++; if (calls_failed < 20 || calls_failed % 50 == 0) say("call failed (%d)", st); }
     }
+    if (now - rate_t0 >= 2000) {
+        rate_cps = (calls_ok - rate_n0) * 1000.0f / (float)(now - rate_t0);
+        rate_t0 = now;
+        rate_n0 = calls_ok;
+    }
     static uint32_t last_issue = 0;
     if (now - last_issue < TRIO_CALL_MS) return;
     for (auto &h : slot) {
@@ -196,11 +206,6 @@ static void issue_and_collect(void) {
         h = muster_call_async(&M, TRIO_T_WAVE, a, w.n);
         if (h >= 0) { step++; last_issue = now; }
         break;                                             // at most one new call per pass
-    }
-    if (now - rate_t0 >= 2000) {
-        rate_cps = (calls_ok - rate_n0) * 1000.0f / (float)(now - rate_t0);
-        rate_t0 = now;
-        rate_n0 = calls_ok;
     }
 }
 

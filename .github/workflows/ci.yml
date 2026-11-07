@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        example: [lead_esp32, worker_esp32, worker_nano, sim_cluster]
+        example: [lead_esp32, worker_esp32, worker_nano, sim_cluster, trio, trio/node_selftest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

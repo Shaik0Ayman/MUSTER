@@ -5,7 +5,7 @@
 //
 // Role is picked from the chip: the ESP32-C6 is the lead, every other ESP32 is
 // a worker. Override with -DTRIO_ROLE_LEAD or -DTRIO_ROLE_WORKER.
-// NOT yet run on hardware (see README.md).
+// Ran on hardware 2026-11-07 (see README.md, "What is and is not verified").
 #pragma once
 #include <Arduino.h>
 #include "trio_task.h"

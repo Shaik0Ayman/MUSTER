@@ -26,11 +26,12 @@
 #define TRIO_PERIOD 128u /* steps per sawtooth cycle */
 #define TRIO_TERMS 256u  /* series terms: ~1 ms on an ESP32 FPU, much slower with no FPU (C6) */
 #define TRIO_COST 50     /* placement cost units */
+#define TRIO_RESULT_BYTES 29u /* 3 x u8 + u16 + f32 + 5 x u32 */
 
 enum { TRIO_CHIP_UNKNOWN = 0, TRIO_CHIP_ESP32 = 1, TRIO_CHIP_C6 = 2, TRIO_CHIP_S3 = 3 };
 
 /* Everything a board reports about itself with each result. Wire layout is
- * fixed-width little-endian (muster_put_*), 31 bytes after the value. */
+ * fixed-width little-endian (muster_put_*), 29 bytes in all (TRIO_RESULT_BYTES). */
 typedef struct
 {
     uint8_t node;       /* muster node ID of the board that ran it             */

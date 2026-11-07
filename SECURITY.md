@@ -15,8 +15,8 @@ what you found, how to reproduce it, and the version or commit.
   anything that bypasses that, or that lets a plan skip `validate()`, is in scope.
 
 ## What is by design
-* **The bus is not authenticated or encrypted.** Any node on the CAN bus (or SPI
-  link) can join, impersonate a node ID, or send calls. Muster assumes a bus you
+* **The bus is not authenticated or encrypted.** Any node on the CAN bus (or an SPI
+  or UART link, or any ESP-NOW radio in range on the same channel) can join, impersonate a node ID, or send calls. Muster assumes a bus you
   physically control. Do not rely on it for safety or security-critical functions
   without adding your own protection. This is documented, not a vulnerability.
 * The MCP server trusts the MCP client that launched it and runs with your user's
