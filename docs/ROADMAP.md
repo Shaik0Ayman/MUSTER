@@ -95,9 +95,15 @@ evaluation is wanted for the report: run the assistant over MCP on 20+ test
 programs and compare its plans with the baseline (validation pass rate on first
 attempt, fewer single-board tasks, lead choice).
 
-## M8 — Telemetry and dashboard
-- [ ] Lead emits a binary event stream over USB serial (sequence-numbered, no printf).
-- [ ] Host decoder + live dashboard: per-board load, bus load, task placements, failures.
+## M8 — Telemetry and dashboard  (`TELEMETRY.md`)
+- [x] Lead emits binary snapshots over USB serial (sequence-numbered, CRC, no printf),
+      carrying counters plus the last events. Optional: `MUSTER_TELEMETRY`, off by default,
+      zero cost when off (AVR footprint unchanged). *(Snapshots rather than a raw event
+      stream: bounded size, and a lost frame loses nothing because counters only grow.)*
+- [x] Host decoder + live dashboard: per-board load, latency, delay, bus load, placements
+      (share of calls), failures, retries, events (`muster dash --serial PORT`; `--demo`).
+      Optional on-board hosting for ESP32 (`muster_dashboard.h`).
+      *(Host-tested; the example compiles for ESP32; not yet run on hardware.)*
 
 ## M9 — MCP server
 - [x] Expose `list_boards`, `analyze_source`, `validate_plan`, `generate_project`

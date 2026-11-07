@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-labelledby="t d">
+  <title id="t">Four ways to connect boards</title>
+  <desc id="d">CAN: a shared twisted-pair bus, simulated. SPI: fast point-to-point wires, simulated. UART: TX and RX crossed, worked on hardware. ESP-NOW: radio, no wires, worked on hardware.</desc>
+  <rect width="1200" height="300" rx="24" fill="#111a30"/>
+  <g font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+    <g fill="#16213d" stroke="#26324d" stroke-width="2">
+      <rect x="24" y="24" width="270" height="252" rx="18"/>
+      <rect x="317" y="24" width="270" height="252" rx="18"/>
+      <rect x="610" y="24" width="270" height="252" rx="18"/>
+      <rect x="903" y="24" width="270" height="252" rx="18"/>
+    </g>
+
+    <!-- CAN: twisted pair bus with three taps -->
+    <g transform="translate(24 0)">
+      <path d="M30 104 C50 92 60 116 80 104 S110 92 130 104 S160 116 180 104 S210 92 240 104" stroke="#f5b942" stroke-width="4" fill="none"/>
+      <path d="M30 104 C50 116 60 92 80 104 S110 116 130 104 S160 92 180 104 S210 116 240 104" stroke="#fde68a" stroke-width="4" fill="none"/>
+      <g fill="#334155"><rect x="52" y="66" width="36" height="22" rx="5"/><rect x="117" y="66" width="36" height="22" rx="5"/><rect x="182" y="66" width="36" height="22" rx="5"/></g>
+      <g stroke="#94a3b8" stroke-width="2"><line x1="70" y1="88" x2="70" y2="98"/><line x1="135" y1="88" x2="135" y2="98"/><line x1="200" y1="88" x2="200" y2="98"/></g>
+      <text x="24" y="160" font-size="26" font-weight="800" fill="#f8d48a">CAN</text>
+      <text x="24" y="188" font-size="15" fill="#cbd5e1">One shared bus for every</text>
+      <text x="24" y="208" font-size="15" fill="#cbd5e1">board, AVR and ESP32 alike.</text>
+      <rect x="24" y="230" width="104" height="28" rx="14" fill="#334155"/>
+      <text x="76" y="249" font-size="14" fill="#cbd5e1" text-anchor="middle">simulated</text>
+    </g>
+
+    <!-- SPI: 4 parallel wires between two chips -->
+    <g transform="translate(317 0)">
+      <rect x="28" y="62" width="50" height="62" rx="8" fill="#334155"/>
+      <rect x="192" y="62" width="50" height="62" rx="8" fill="#334155"/>
+      <g stroke="#c084fc" stroke-width="4"><line x1="78" y1="72" x2="192" y2="72"/><line x1="78" y1="86" x2="192" y2="86"/><line x1="78" y1="100" x2="192" y2="100"/><line x1="78" y1="114" x2="192" y2="114"/></g>
+      <text x="24" y="160" font-size="26" font-weight="800" fill="#dcbcff">SPI</text>
+      <text x="24" y="188" font-size="15" fill="#cbd5e1">A fast lane between two</text>
+      <text x="24" y="208" font-size="15" fill="#cbd5e1">ESP32-S3s, next to CAN.</text>
+      <rect x="24" y="230" width="104" height="28" rx="14" fill="#334155"/>
+      <text x="76" y="249" font-size="14" fill="#cbd5e1" text-anchor="middle">simulated</text>
+    </g>
+
+    <!-- UART: TX/RX crossed -->
+    <g transform="translate(610 0)">
+      <rect x="28" y="62" width="50" height="62" rx="8" fill="#334155"/>
+      <rect x="192" y="62" width="50" height="62" rx="8" fill="#334155"/>
+      <path d="M78 78 C130 78 140 108 192 108" stroke="#60a5fa" stroke-width="4" fill="none"/>
+      <path d="M78 108 C130 108 140 78 192 78" stroke="#93c5fd" stroke-width="4" fill="none"/>
+      <g font-family="ui-monospace, Consolas, monospace" font-size="11" fill="#cbd5e1"><text x="36" y="82">TX</text><text x="36" y="112">RX</text><text x="214" y="82">TX</text><text x="214" y="112">RX</text></g>
+      <text x="24" y="160" font-size="26" font-weight="800" fill="#b5d4ff">UART</text>
+      <text x="24" y="188" font-size="15" fill="#cbd5e1">Two wires and any serial</text>
+      <text x="24" y="208" font-size="15" fill="#cbd5e1">port. One cable per pair.</text>
+      <rect x="24" y="230" width="176" height="28" rx="14" fill="#14532d"/>
+      <text x="112" y="249" font-size="14" fill="#bbf7d0" text-anchor="middle">worked on hardware</text>
+    </g>
+
+    <!-- ESP-NOW: radio waves -->
+    <g transform="translate(903 0)">
+      <rect x="28" y="72" width="44" height="44" rx="8" fill="#334155"/>
+      <rect x="198" y="72" width="44" height="44" rx="8" fill="#334155"/>
+      <g fill="none" stroke="#2dd4bf" stroke-width="4" stroke-linecap="round">
+        <path d="M90 76 a26 26 0 0 1 0 36"/>
+        <path d="M104 66 a40 40 0 0 1 0 56" stroke-opacity="0.7"/>
+        <path d="M180 76 a26 26 0 0 0 0 36"/>
+        <path d="M166 66 a40 40 0 0 0 0 56" stroke-opacity="0.7"/>
+      </g>
+      <text x="24" y="160" font-size="26" font-weight="800" fill="#9cf2e4">ESP-NOW</text>
+      <text x="24" y="188" font-size="15" fill="#cbd5e1">ESP32 radio. No wires,</text>
+      <text x="24" y="208" font-size="15" fill="#cbd5e1">no router, just power.</text>
+      <rect x="24" y="230" width="176" height="28" rx="14" fill="#14532d"/>
+      <text x="112" y="249" font-size="14" fill="#bbf7d0" text-anchor="middle">worked on hardware</text>
+    </g>
+  </g>
+</svg>

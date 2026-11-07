@@ -10,6 +10,8 @@ Each one builds with `pio run -d firmware/examples/<name>`, and CI builds them a
 | [`worker_esp32`](worker_esp32/src/main.cpp) | ESP32-S3 (worker) | CAN (TWAI); `worker_esp32_spi` adds SPI | an FPU worker holding `imu_filter` | compiles; **not run on hardware** |
 | [`worker_nano`](worker_nano/src/main.cpp) | Arduino Nano (worker) | CAN (MCP2515) | the deliberately weak 8-bit worker | compiles; **not run on hardware** |
 | [`sim_cluster`](sim_cluster/README.md) | one ESP32-S3 in the Wokwi simulator | in-memory 8-byte bus | a lead and two workers in one chip: failover, module moves, rejoin, with buttons and LEDs | logic host-tested (`test_sim_cluster`); simulator only |
+| [`dashboard`](dashboard/src/main.cpp) | ESP32 lead + the `trio` workers | ESP-NOW | live dashboard: telemetry over USB for `muster dash`, or served by the lead itself (`lead_wifi`) | compiles; **not run on hardware** |
+| [`portability`](portability/src/main.cpp) | any board in [`docs/BOARDS.md`](../../docs/BOARDS.md) | in-chip 8-byte bus + UART | self-test: a whole cluster inside one chip, prints PASS/FAIL | builds per [`BOARDS.md`](../../docs/BOARDS.md) |
 | [`trio`](trio/README.md) | ESP32-C6 (lead) + 2 × ESP32 DevKit | ESP-NOW (no wires) | a math task balanced across two workers, PWM output, live web dashboard | **ran on hardware** 2026-11-07: join, calls, failover, rejoin, dashboard |
 
 `lead_esp32`, `worker_esp32` and `worker_nano` form one CAN cluster: flash all

@@ -13,7 +13,8 @@ main.cpp + boards.yaml → analyse (libclang) → partition → validate → gen
 pip install -e ".[test]"      # from tools/muster-cli in a clone of the repository
 ```
 
-Python 3.9+. Dependencies: `pyyaml`, `libclang`, `wireviz`. To compile for boards you
+Python 3.9+. Dependencies: `pyyaml`, `libclang`, `wireviz`; `pyserial` only for
+`muster dash --serial` (`pip install -e ".[dash]"`). To compile for boards you
 also need [PlatformIO](https://platformio.org/); Graphviz is optional and renders the
 wiring diagram.
 
@@ -34,6 +35,7 @@ muster deploy examples/quadruped_modules/boards.yaml --dry-run   # upload, lead 
 | `muster plan boards.yaml main.cpp [--plan plan.json] [--out DIR]` | validate a plan (default: the baseline) and generate the project |
 | `muster build [-e ENV ...]` | compile every board's firmware |
 | `muster deploy boards.yaml [--dry-run]` | upload every board, lead last, stop at the first failure |
+| `muster dash --serial PORT \| --demo \| --replay FILE` | live cluster dashboard, hosted on this PC ([docs](https://github.com/Shaik0Ayman/MUSTER/blob/main/docs/TELEMETRY.md)) |
 | `muster mcp` | serve the same operations to an AI assistant over MCP (stdio) |
 
 Examples: [`examples/quadruped`](examples/quadruped) (one image per board) and
@@ -64,7 +66,7 @@ lead-assigned modules).
 ## Tests
 
 ```bash
-pytest                       # 74 tests: analyser, validator, codegen + host round trip, MCP, CLI
+pytest                       # 83 tests: analyser, validator, codegen + host round trip, MCP, CLI
 MUSTER_PIO_TEST=1 pytest     # also compile generated projects for real boards
 ```
 

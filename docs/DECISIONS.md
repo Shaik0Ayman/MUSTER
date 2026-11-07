@@ -95,3 +95,11 @@ Short records of choices that are easy to second-guess. Add new ones at the bott
     extra message type and no way to address one board: placement spreads the calls, and the board
     that ran each one describes itself. A board that gets no work shows no fresh numbers, which is
     itself visible on the page.
+31. **Telemetry is counters measured by the lead, sent as snapshots, rendered on the PC.** The lead
+    already sees every call (hub and spoke), so workers measure nothing and the wire protocol is
+    unchanged. The board keeps only counters that grow; the page subtracts two snapshots for rates,
+    so the board never divides, keeps windows or formats JSON, and a lost frame loses nothing. It is
+    compiled out unless `MUSTER_TELEMETRY` is set, because a 2 KB worker can't afford ~280 B for
+    numbers nobody reads. The page is hosted by `muster dash` on the PC by default (zero cost on the
+    board); `muster_dashboard.h` lets an ESP32 serve the same page when there is no PC, at ~74 KB of
+    flash. One HTML file serves both; the board's copy is generated and checked by `make`.

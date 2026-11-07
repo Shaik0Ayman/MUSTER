@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440" role="img" aria-labelledby="t d">
+  <title id="t">Muster</title>
+  <desc id="d">A lead board in the middle hands work to three worker boards (two ESP32s and an Arduino Nano) over CAN, SPI, UART and ESP-NOW links.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101a33"/>
+      <stop offset="1" stop-color="#1b1036"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f5b942" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#f5b942" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#ffffff" fill-opacity="0.06"/>
+    </pattern>
+    <!-- a little dev board: PCB, chip, pin headers, USB -->
+    <symbol id="board" viewBox="0 0 120 80">
+      <rect x="2" y="2" width="116" height="76" rx="10" fill="currentColor"/>
+      <rect x="2" y="2" width="116" height="76" rx="10" fill="#000" fill-opacity="0.18"/>
+      <rect x="40" y="22" width="40" height="36" rx="4" fill="#0b1020"/>
+      <rect x="46" y="28" width="28" height="24" rx="2" fill="#1f2a44"/>
+      <g fill="#e8ecf5" fill-opacity="0.85">
+        <circle cx="14" cy="12" r="2.4"/><circle cx="26" cy="12" r="2.4"/><circle cx="38" cy="12" r="2.4"/><circle cx="50" cy="12" r="2.4"/><circle cx="62" cy="12" r="2.4"/><circle cx="74" cy="12" r="2.4"/><circle cx="86" cy="12" r="2.4"/><circle cx="98" cy="12" r="2.4"/>
+        <circle cx="14" cy="68" r="2.4"/><circle cx="26" cy="68" r="2.4"/><circle cx="38" cy="68" r="2.4"/><circle cx="50" cy="68" r="2.4"/><circle cx="62" cy="68" r="2.4"/><circle cx="74" cy="68" r="2.4"/><circle cx="86" cy="68" r="2.4"/><circle cx="98" cy="68" r="2.4"/>
+      </g>
+      <rect x="106" y="30" width="14" height="20" rx="3" fill="#c9d1e3"/>
+      <circle cx="20" cy="40" r="4" fill="#7CFFB2"/>
+    </symbol>
+  </defs>
+
+  <rect width="1200" height="440" rx="24" fill="url(#bg)"/>
+  <rect width="1200" height="440" rx="24" fill="url(#dots)"/>
+
+  <!-- left: words -->
+  <text x="64" y="150" font-family="ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="96" font-weight="800" fill="#ffffff" letter-spacing="-2">Muster</text>
+  <text x="68" y="206" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="27" fill="#cfd6ea">Write one program.</text>
+  <text x="68" y="242" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="27" fill="#cfd6ea">Muster splits it across your boards.</text>
+  <g font-family="ui-monospace, 'Cascadia Code', Consolas, monospace" font-size="17">
+    <rect x="68" y="282" width="102" height="34" rx="17" fill="#f5b942" fill-opacity="0.16" stroke="#f5b942" stroke-opacity="0.6"/>
+    <text x="119" y="305" text-anchor="middle" fill="#f8d48a">CAN</text>
+    <rect x="180" y="282" width="102" height="34" rx="17" fill="#c084fc" fill-opacity="0.16" stroke="#c084fc" stroke-opacity="0.6"/>
+    <text x="231" y="305" text-anchor="middle" fill="#dcbcff">SPI</text>
+    <rect x="292" y="282" width="102" height="34" rx="17" fill="#60a5fa" fill-opacity="0.16" stroke="#60a5fa" stroke-opacity="0.6"/>
+    <text x="343" y="305" text-anchor="middle" fill="#b5d4ff">UART</text>
+    <rect x="404" y="282" width="122" height="34" rx="17" fill="#2dd4bf" fill-opacity="0.16" stroke="#2dd4bf" stroke-opacity="0.6"/>
+    <text x="465" y="305" text-anchor="middle" fill="#9cf2e4">ESP-NOW</text>
+  </g>
+  <text x="68" y="364" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="18" fill="#8d97b5">8-bit AVR + 32-bit ESP32 · one lead, many workers · runs on a 2 KB ATmega328P</text>
+
+  <!-- right: the cluster -->
+  <circle cx="900" cy="220" r="150" fill="url(#glow)"/>
+
+  <!-- links -->
+  <g fill="none" stroke-width="4" stroke-linecap="round">
+    <path id="l1" d="M900 220 L760 96" stroke="#f5b942" stroke-opacity="0.7"/>
+    <path id="l2" d="M900 220 L1060 96" stroke="#c084fc" stroke-opacity="0.7"/>
+    <path id="l3" d="M900 220 L760 350" stroke="#60a5fa" stroke-opacity="0.7"/>
+    <path id="l4" d="M900 220 L1060 350" stroke="#2dd4bf" stroke-opacity="0.7" stroke-dasharray="3 10"/>
+  </g>
+
+  <!-- packets travelling out and back -->
+  <g>
+    <circle r="7" fill="#f5b942"><animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="0;1;0" keyTimes="0;0.5;1" calcMode="linear"><mpath href="#l1"/></animateMotion></circle>
+    <circle r="7" fill="#c084fc"><animateMotion dur="2.8s" begin="-0.4s" repeatCount="indefinite" keyPoints="0;1;0" keyTimes="0;0.5;1" calcMode="linear"><mpath href="#l2"/></animateMotion></circle>
+    <circle r="7" fill="#60a5fa"><animateMotion dur="3.2s" begin="-0.8s" repeatCount="indefinite" keyPoints="0;1;0" keyTimes="0;0.5;1" calcMode="linear"><mpath href="#l3"/></animateMotion></circle>
+    <circle r="7" fill="#2dd4bf"><animateMotion dur="2.6s" begin="-1.2s" repeatCount="indefinite" keyPoints="0;1;0" keyTimes="0;0.5;1" calcMode="linear"><mpath href="#l4"/></animateMotion></circle>
+  </g>
+
+  <!-- workers -->
+  <g font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="16" fill="#cfd6ea" text-anchor="middle">
+    <use href="#board" x="700" y="40" width="120" height="80" style="color:#14b8a6"/>
+    <text x="760" y="30">ESP32 worker</text>
+    <use href="#board" x="1000" y="40" width="120" height="80" style="color:#14b8a6"/>
+    <text x="1060" y="30">ESP32-S3 worker</text>
+    <use href="#board" x="700" y="300" width="120" height="80" style="color:#3b82f6"/>
+    <text x="760" y="400">Nano (8-bit!)</text>
+    <use href="#board" x="1000" y="300" width="120" height="80" style="color:#14b8a6"/>
+    <text x="1060" y="400">ESP32 worker</text>
+  </g>
+
+  <!-- the lead, with a crown -->
+  <use href="#board" x="826" y="172" width="148" height="98" style="color:#e09b1a"/>
+  <path d="M872 166 l10 -24 l18 16 l18 -16 l10 24 z" fill="#ffd166" stroke="#7a5200" stroke-width="2" stroke-linejoin="round"/>
+  <text x="900" y="296" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="18" font-weight="700" fill="#ffe2a6" text-anchor="middle">LEAD</text>
+</svg>

@@ -8,6 +8,22 @@ and boards on different protocol versions refuse each other at `JOIN`.
 ## [Unreleased]
 
 ### Added
+* **Telemetry and the dashboard (roadmap M8).** Optional lead-side counters
+  (`MUSTER_TELEMETRY`, off by default, compiled out when off): per-board calls, failures,
+  retries, latency (last/avg/min/max) and busy time; per-link frames, bytes and send
+  failures; end-to-end call delay; a latency histogram; the last events.
+  `muster_telemetry_frame()` writes a CRC-protected binary snapshot (docs/TELEMETRY.md);
+  `muster_set_micros()` gives µs latencies. No wire-protocol change.
+* `muster dash`: the dashboard hosted on your PC, reading the lead's USB serial
+  (`--serial`, needs pyserial), a capture (`--replay`) or a simulated cluster (`--demo`).
+* `muster_dashboard.h`: optional on-board hosting of the same page for an ESP32 lead.
+  `firmware/examples/dashboard` shows both (compiles for ESP32; not run on hardware).
+* `firmware/examples/portability` and `docs/BOARDS.md`: one self-test sketch built for
+  boards across MCU families (AVR, megaAVR, ESP32/ESP8266, STM32, RP2040, nRF52, SAM/SAMD,
+  Teensy (NXP), Renesas RA); flashed, it runs a whole cluster inside the chip and prints
+  PASS/FAIL. All 22 boards compile; none have been flashed with it yet.
+* Loopback link sizes (`LB_MAX_NODES`, `LB_QUEUE`, `LB_FRAME`) can be overridden.
+* README rewritten for newcomers, with illustrations (docs/images/).
 * **Lead-assigned modules** (`MUSTER_MODULE`): long-running units the lead hands to
   boards, re-places when a board is lost, and moves away from a board that declines
   to start them. Wire message `ASSIGN`, module masks in `JOIN`/`BEAT`.
@@ -34,6 +50,10 @@ and boards on different protocol versions refuse each other at `JOIN`.
 * GPL-3.0-only license, README, CONTRIBUTING, SECURITY, issue and PR templates.
 
 ### Fixed
+* `muster plan` crashed with `UnicodeEncodeError` on a Windows console when a plan was
+  rejected (the console's cp1252 can't print the error marks), hiding why it was
+  rejected. A missing or malformed `--plan` file now gives a clean error, not a traceback.
+* `trio_mock.py` failed to start on Windows (read `dashboard.h` with the system encoding).
 * `muster_link_espnow.h`: the radio code was compiled on *any* Arduino build (or any
   ESP-IDF build) and failed with `WiFi.h: No such file or directory` on an Arduino
   Nano or a plain ESP-IDF project. It is now limited to Arduino-ESP32
@@ -61,7 +81,7 @@ and boards on different protocol versions refuse each other at `JOIN`.
 * **Protocol v3** (incompatible with v2): `JOIN` 14 → 19 bytes, `ACK` gains a `uid`,
   `BEAT` gains `running`/`refused`. See `docs/PROTOCOL.md`.
 * Minimal ATmega328P worker: 8120 → 8854 B flash, 468 → 492 B static RAM.
-* Host tests: 101 → 193 checks in 12 binaries. Toolchain tests: 63 → 74.
+* Host tests: 101 → 215 checks in 13 binaries. Toolchain tests: 63 → 83.
 
 ### Not yet verified
 * The CAN and SPI drivers and everything built on them have **not run on real

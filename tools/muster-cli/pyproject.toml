@@ -24,6 +24,7 @@ Changelog = "https://github.com/Shaik0Ayman/MUSTER/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = ["pytest"]
+dash = ["pyserial"]       # only for `muster dash --serial`
 
 [project.scripts]
 muster = "muster_cli.cli:main"
@@ -32,7 +33,7 @@ muster = "muster_cli.cli:main"
 packages = ["muster_cli"]
 
 [tool.setuptools.package-data]
-muster_cli = ["db/*.yaml", "shim/*"]
+muster_cli = ["db/*.yaml", "shim/*", "dash/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -9,6 +9,7 @@ and a port can be "unplugged".
 | Binary | Covers |
 |---|---|
 | `test_bus` | the original three-board scenario (join, fragmentation, placement, failover, rejoin) |
+| `test_telemetry` | the lead's optional counters and snapshot frame: CRC, sequence, per-board latency and load with a µs clock, a board going silent, the event window |
 | `test_core` | duplicate suppression, worker resends, slow tasks, liveness/rejoin, lead restart, hostile input, API edges |
 | `test_framing` | reassembly edge cases, link MTU checks, node table full/recycle, version check |
 | `test_loss` | 5% random frame loss, 300 calls (with `MUSTER_MAX_RETRIES=6`) |
@@ -28,6 +29,16 @@ and a port can be "unplugged".
   board that doesn't drive it.
 * `check-copies`: the headers inside `examples/trio/muster_trio/` are identical to
   `src/` (`make sync-copies` refreshes them).
+* `check-dashboard`: `src/muster_dashboard_page.h` matches the dashboard page it is
+  generated from (`tools/muster-cli/muster_cli/dash/embed.py`; needs `python3`).
+
+The toolchain's `tests/test_telemetry.py` round-trips frames, finds frames in a serial
+stream mixed with text, serves the dashboard over HTTP, and decodes a frame produced by
+the real C encoder (`test_telemetry.c` built on the host).
+
+**Portability:** `firmware/examples/portability` builds one self-test sketch for boards
+across MCU families (results in [`BOARDS.md`](BOARDS.md)). Flashed, it runs a lead and
+workers inside one chip and prints `MUSTER SELFTEST: PASS/FAIL`.
 
 ## Hardware results
 

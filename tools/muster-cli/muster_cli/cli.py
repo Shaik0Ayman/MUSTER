@@ -8,6 +8,7 @@
                  [--plan plan.json]         (default plan: the deterministic baseline)
   muster build   [-e ENV ...]             compile every board's firmware
   muster deploy  boards.yaml [--dry-run]  upload every board, lead last
+  muster dash    --serial PORT | --demo   live cluster dashboard, hosted on this PC
   muster mcp                              serve these tools to an MCP client
                                           (e.g. Claude Code) over stdio
 """
@@ -27,7 +28,7 @@ def _print_tasks(analysis, source):
         print(f"      - {t['name']:<16} needs={'|'.join(t['needs']) or '-'} cost={t['cost']} "
               f"ram={t['ram_kb']}KB  {size}")
         for e in t["errors"]:
-            print(f"          ✗ {e}")
+            print(f"          error: {e}")
     if analysis["stubbed_headers"]:
         print(f"      (not found, treated as empty: {', '.join(analysis['stubbed_headers'])})")
 
@@ -51,7 +52,12 @@ def cmd_plan(args):
     analysis = P.analyse(args.source)
     _print_tasks(analysis, args.source)
     if args.plan:
-        plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        try:
+            plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        except OSError as e:
+            raise P.MusterError(f"cannot read plan file {args.plan}: {e.strerror or e}")
+        except json.JSONDecodeError as e:
+            raise P.MusterError(f"plan file {args.plan} is not valid JSON: {e}")
         plan["source"] = f"file:{args.plan}"         # who submitted it, not who drafted it
         print(f"[2/4] plan from {args.plan}")
     else:
@@ -61,7 +67,7 @@ def cmd_plan(args):
     r = P.make(plan, args.boards, args.source, args.out, wiring=not args.no_wiring)
     print(f"[3/4] validation: {len(r['errors'])} error(s), {len(r['warnings'])} warning(s)")
     for e in r["errors"]:
-        print(f"      ✗ {e}")
+        print(f"      error: {e}")
     for w in r["warnings"]:
         print(f"      ! {w}")
     if not r["ok"]:
@@ -103,12 +109,33 @@ def cmd_deploy(args):
             sys.exit(f"upload failed for {s['board']}; stopped so the bus is not left half-flashed")
 
 
+def cmd_dash(args):
+    if not (args.serial or args.demo or args.replay):
+        sys.exit("muster dash: give --serial PORT (the lead's USB port), --replay FILE or --demo")
+    from .dashboard import serve
+    serve(args)
+
+
 def cmd_mcp(args):
     from .mcp_server import serve
     serve()
 
 
+def _tolerate_console_encoding():
+    # A Windows console defaults to cp1252, which cannot encode the marks we print
+    # (e.g. the cross before each validation error). Without this, a rejected plan
+    # crashed with UnicodeEncodeError instead of showing why it was rejected.
+    # The MCP protocol is unaffected: it writes UTF-8 bytes to stdout.buffer.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv=None):
+    _tolerate_console_encoding()
     p = argparse.ArgumentParser(prog="muster", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -139,6 +166,20 @@ def main(argv=None):
     dp.add_argument("--out", default="muster_out")
     dp.add_argument("--dry-run", action="store_true")
     dp.set_defaults(fn=cmd_deploy)
+
+    da = sub.add_parser("dash", help="live dashboard for a running cluster (hosted on this PC)")
+    src = da.add_mutually_exclusive_group()
+    src.add_argument("--serial", metavar="PORT", help="the lead's serial port, e.g. COM5 or /dev/ttyUSB0")
+    src.add_argument("--demo", action="store_true", help="a simulated cluster, no hardware needed")
+    src.add_argument("--replay", metavar="FILE", help="raw bytes captured from the lead's port")
+    da.add_argument("--baud", type=int, default=115200)
+    da.add_argument("--port", type=int, default=8090, help="HTTP port (default 8090)")
+    da.add_argument("--host", default="127.0.0.1",
+                    help="address to listen on (default: this PC only; 0.0.0.0 shares it on your network)")
+    da.add_argument("--open", action="store_true", help="open the page in your browser")
+    da.add_argument("--no-echo", dest="echo", action="store_false",
+                    help="don't print the board's own serial text")
+    da.set_defaults(fn=cmd_dash)
 
     sub.add_parser("mcp", help="run the MCP server on stdio").set_defaults(fn=cmd_mcp)
 

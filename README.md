@@ -1,180 +1,238 @@
-<div align="center">
+<p align="center">
+  <img src="docs/images/hero.svg" alt="Muster: a lead board hands work to ESP32 and Arduino Nano workers over CAN, SPI, UART and ESP-NOW" width="100%">
+</p>
 
-# Muster
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL v3"></a>
+  <img src="https://img.shields.io/badge/core-C99%20%2F%20C%2B%2B11-informational" alt="C99 core">
+  <img src="https://img.shields.io/badge/links-CAN%20%C2%B7%20SPI%20%C2%B7%20UART%20%C2%B7%20ESP--NOW-informational" alt="Links">
+  <img src="https://img.shields.io/badge/host%20checks-215%20passing-brightgreen" alt="215 host checks passing">
+  <a href="docs/BOARDS.md"><img src="https://img.shields.io/badge/compiles%20on-22%20boards-brightgreen" alt="Compiles on 22 boards"></a>
+</p>
 
-**Write one program. Muster splits it across your microcontroller boards.**
+<p align="center">
+  <a href="#what-muster-is">What it is</a> ·
+  <a href="#where-to-start">Where to start</a> ·
+  <a href="#try-it-on-real-boards">Real boards</a> ·
+  <a href="#the-dashboard">Dashboard</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#which-boards-work">Boards</a> ·
+  <a href="#faq">FAQ</a> ·
+  <a href="#status">Status</a>
+</p>
 
-A framework for multi-MCU embedded systems: boards of different families
-(8-bit AVR, 32-bit ESP32) share work over **CAN, SPI, UART or ESP-NOW**. One
-**lead** board decides, live, who runs what. **Workers** join, execute and report.
+## What Muster is
 
-[![License: GPL v3](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
-![C99 core](https://img.shields.io/badge/core-C99%20%2F%20C%2B%2B11-informational)
-![Boards](https://img.shields.io/badge/boards-ESP32%20%C2%B7%20ESP32--S3%20%C2%B7%20ESP32--C6%20%C2%B7%20ATmega328P-success)
-![Links](https://img.shields.io/badge/links-CAN%20%C2%B7%20SPI%20%C2%B7%20UART%20%C2%B7%20ESP--NOW-informational)
+Most of us have a drawer of microcontroller boards. An ESP32 with a fast floating-point
+unit, an Arduino Nano that's good at reading sensors and bad at maths, another ESP32
+that was added later. Getting them to work together usually means writing your own
+message formats, deciding by hand which board runs which function, and rewriting a good
+part of the firmware the day you move one of them.
 
-</div>
+We wanted to stop doing that, so we wrote Muster.
 
-> [!WARNING]
-> **Status: UART and ESP-NOW run on hardware; CAN and SPI so far only in simulation.**
-> Every transport is tested on simulated links (193 host checks in 12 binaries, C99
-> and C++11). On real boards, the ESP-NOW [`trio`](firmware/examples/trio) demo (an
-> ESP32-C6 lead and two ESP32 workers) joined, balanced calls, failed over and rejoined,
-> and the UART link worked. The CAN and SPI drivers compile but **have not been run on
-> real hardware yet**. See [Status](#status) for exactly what is and is not proven.
+The idea is simple. One board is the **lead** and the others are **workers**. You write
+ordinary Arduino-style C++ and mark the functions you want to share. Muster works out which
+boards are able to run each function and builds firmware for every board. Then, while
+everything is running, the lead decides for each call which board should do it, usually
+the one that will finish soonest. If a worker stops answering (unplugged, crashed, stuck
+in a long loop), the lead notices within about a second and gives the work to another
+board. When the worker comes back, it rejoins.
 
----
+You don't write any networking code. Boards can talk over CAN, SPI, UART or ESP-NOW, or
+several of these at once, and the runtime is small enough to run on an ATmega328P with
+2 KB of RAM.
 
-## Contents
+> [!NOTE]
+> **Where things stand:** the UART and ESP-NOW links have run on real boards. CAN and
+> SPI have only run in simulation so far. Everything passes 215 simulated checks in both
+> C99 and C++11, and the runtime compiles for 22 boards from AVR, ESP32, STM32, RP2040,
+> nRF52, SAMD, NXP Teensy and Renesas. The [Status](#status) section has the details.
 
-[Why Muster](#why-muster) · [How it works](#how-it-works) · [Quick start](#quick-start) ·
-[Try it on real boards](#try-it-on-real-boards-esp-now-no-wiring) · [Install the runtime](#install-the-runtime-as-a-library) ·
-[Walkthrough](#walkthrough-one-program-four-boards) · [Simulate it](#simulate-it-no-hardware) · [Tasks and modules](#tasks-and-modules) ·
-[Command line](#command-line) · [Use it from an AI assistant](#use-it-from-an-ai-assistant-mcp) ·
-[Use the runtime directly](#use-the-runtime-directly-c-api) · [Configuration](#configuration) ·
-[Guarantees and limits](#guarantees-and-limits) · [Supported boards](#supported-boards) ·
-[Status](#status) · [Repository layout](#repository-layout) · [Documentation](#documentation) ·
-[Contributing](#contributing) · [License](#license)
+## Where to start
 
----
+It depends on what you have on your desk:
 
-## Why Muster
+- **No hardware at all.** Run the [simulation tests](#try-it-without-hardware). It takes
+  about two minutes and you can watch boards fail over in your terminal.
+- **Three ESP32 boards.** Run the [`trio` demo](#try-it-on-real-boards). There's no
+  wiring, and you get a live dashboard on your phone.
+- **ESP32s, a Nano and some CAN modules.** Wire a bus using [`docs/HARDWARE.md`](docs/HARDWARE.md)
+  and flash the [CAN examples](firmware/examples). Set aside an afternoon.
+- **A board from another family** (STM32, RP2040, nRF52, Teensy and so on). Check
+  [which boards work](docs/BOARDS.md) and flash the self-test sketch.
+- **One program you'd like split across boards.** Follow the [walkthrough](#walkthrough-one-program-four-boards).
+- **An AI assistant such as Claude Code.** Connect Muster [over MCP](#using-it-from-an-ai-assistant)
+  and let it propose the split.
 
-A weak 8-bit board that needs a floating-point filter, a fast board that sits idle,
-a second fast board you added later: each used to mean hand-written message formats,
-a hand-picked "who runs what", and firmware that breaks the day you move a task.
+## Try it without hardware
 
-Muster does three things about it:
-
-1. **One program, many boards.** You annotate ordinary Arduino-style C++ functions.
-   The toolchain works out which boards can hold which code and builds one
-   firmware per board (or per board *type*).
-2. **Placement is live.** Every board is flashed with the code it *may* run. At
-   run time the lead picks, per call, the board that will finish soonest, and
-   re-places the work when a board goes quiet.
-3. **The wire format is safe by construction.** Values cross boards as fixed-width,
-   little-endian bytes generated for you. An `int` that is 16 bits on an AVR and 32
-   on an ESP32 is rejected at plan time instead of corrupting data on the bus.
-
-## How it works
-
-```mermaid
-flowchart LR
-    subgraph CAN["CAN bus · 500 kbit/s · control plane (every board)"]
-      direction LR
-      L["Lead<br/>ESP32-S3<br/>places · relays · watches"]
-      W1["Worker<br/>ESP32-S3"]
-      W2["Worker<br/>Arduino Nano + MCP2515"]
-    end
-    L <-. "optional SPI accelerator<br/>(point to point)" .-> W1
-```
-
-* **Any link, or several at once.** CAN (on-chip TWAI or an MCP2515), SPI, UART and
-  ESP-NOW all look the same to the runtime. A board can hold up to 8 links; unicast
-  goes over the fastest live one. See [`docs/LINKS.md`](docs/LINKS.md).
-* **Code is resident, placement is live.** An 8-bit AVR cannot load code at run
-  time, so each board holds the tasks it may run; the lead chooses among the live
-  boards that hold the task.
-* **Hub and spoke.** Every call and result passes through the lead, which is what
-  makes failover, load-aware placement and (later) a dashboard possible.
-* **At-least-once across boards, once per board.** Lost frames are recovered by
-  retries; a resent call is answered from a duplicate cache.
-* **Static and single-threaded.** No `malloc`, no recursion, no threads in the
-  core. It fits a 2 KB ATmega328P.
-
-The toolchain turns one annotated program into per-board firmware:
-
-```mermaid
-flowchart LR
-    A["main.cpp<br/>+ boards.yaml"] --> B["analyse<br/>libclang: tasks,<br/>wire types, sizes"]
-    B --> C["partition<br/>baseline or an<br/>assistant over MCP"]
-    C --> D{"validate<br/>final authority"}
-    D -->|ok| E["generate<br/>typed glue ·<br/>PlatformIO · wiring"]
-    D -->|errors| C
-    E --> F["build<br/>pio run"] --> G["deploy<br/>lead last"]
-```
-
-Whoever proposes a plan (the deterministic baseline, a hand-written file, or an
-AI assistant), **the validator decides**, and generation re-validates on its own.
-
-## Quick start
-
-You do not need hardware to try it.
-
-**Requirements:** a C compiler (`gcc`/`clang`) and `make` for the host tests;
-Python 3.9+ for the toolchain; [PlatformIO](https://platformio.org/) to compile for
-boards; Graphviz (optional) to render the wiring diagram.
+You need `gcc` (or `clang`) and `make`.
 
 ```bash
 git clone https://github.com/Shaik0Ayman/MUSTER.git
 cd MUSTER
 
-# 1. Run the runtime tests (simulated buses: failover, loss, CAN + SPI, modules)
-make -C firmware/test            # strict C99
-make -C firmware/test cpp        # the same tests as C++11 (Arduino compiles as C++)
-
-# 2. Install the toolchain
-pip install -e "tools/muster-cli[test]"
-
-# 3. Split an example program across boards
-muster plan tools/muster-cli/examples/quadruped/boards.yaml \
-            tools/muster-cli/examples/quadruped/main.cpp
-muster build                     # compile it for every board
+make -C firmware/test          # 215 checks: failover, lost frames, all four links
+make -C firmware/test cpp      # the same tests built as C++11, the way Arduino builds them
 ```
 
-> On Windows, use WSL for `make`/`gcc` and run Python natively, or set
-> `MUSTER_HOST_CXX=wsl` so the toolchain tests compile their host round trip
-> inside WSL.
+The tests start simulated boards, unplug some of them, and check that the work moves
+and that the boards rejoin afterwards. Part of the output looks like this:
 
-## Try it on real boards (ESP-NOW, no wiring)
+```text
+[   201] lead: node1 (id 133) joined
+[   201] lead: node2 (id 132) joined
+[  2002] square(3) = 9   ran on node1 (id 133)
+[  3500] node2 cable PULLED
+[  4402] lead: node2 (id 132) LOST
+[  4402] lead: module blink -> node1 (id 133)
+[ 10401] lead: node1 (id 133) joined
+```
 
-The quickest hardware setup is [`firmware/examples/trio`](firmware/examples/trio):
-three ESP32 boards and no wires between them, just power.
+On Windows, run `make` and `gcc` inside WSL. For the Python toolchain, run Python on
+Windows and set `MUSTER_HOST_CXX=wsl`.
 
-* An **ESP32-C6** is the lead. It places calls and serves a live dashboard from its own
-  WiFi access point (`muster-trio`, http://192.168.4.1/).
-* Two **ESP32 DevKits** are workers running the same image. Each computes a Fourier
-  series and drives a PWM pin with the result.
-* Switch a worker off and the other takes the calls; switch it back on and it rejoins.
+If you'd rather watch it than read logs, [`firmware/examples/sim_cluster`](firmware/examples/sim_cluster)
+runs a lead and two workers inside one simulated ESP32-S3 in [Wokwi](https://wokwi.com),
+with an LED per board and buttons that "pull the cable".
+
+## Try it on real boards
+
+This is the setup we've actually run on hardware, and it's the easiest one to build.
+
+<p align="center">
+  <img src="docs/images/trio.svg" alt="An ESP32-C6 lead talks to two ESP32 DevKit workers over ESP-NOW and serves a dashboard to a phone" width="100%">
+</p>
+
+You need an ESP32-C6 for the lead and two ESP32 DevKits for the workers. There are no
+CAN modules and no jumper wires; the boards talk over ESP-NOW, the ESP32's own radio.
 
 ```bash
 cd firmware/examples/trio
-pio run -e worker_esp32 -t upload --upload-port COMx   # each DevKit
-pio run -e lead_c6      -t upload --upload-port COMy   # the C6 (PlatformIO Core >= 6.2.0)
+pio run -e worker_esp32 -t upload --upload-port COMx   # once for each DevKit
+pio run -e lead_c6      -t upload --upload-port COMy   # the C6 (needs PlatformIO Core 6.2.0 or newer)
 ```
 
-This ran on hardware on 2026-11-07: join, placement, failover and rejoin all worked,
-and a worker's average compute time per call was about 900 µs. Radio round-trip latency
-has not been measured yet; see [the results](docs/TESTING.md#hardware-results). No C6?
-`-e lead_esp32dev` runs the lead role on a third classic ESP32.
+Then connect a phone or laptop to the WiFi network `muster-trio` (password `muster123`)
+and open http://192.168.4.1/. The page shows which worker ran each call, how long it
+took, and which boards are alive.
 
-## Install the runtime as a library
+<p align="center">
+  <img src="docs/images/trio-dashboard.png" alt="The trio dashboard: three boards alive, calls completed, work split between two workers" width="85%">
+  <br><sub>The trio page, shown here with its <a href="firmware/examples/trio/tools/trio_mock.py">preview script</a> and simulated numbers.</sub>
+</p>
 
-The runtime is the folder [`firmware/`](firmware): headers only, with
-`library.properties` (Arduino) and `library.json` (PlatformIO). It is **not yet in the
-Arduino Library Manager or the PlatformIO Registry**, so install it from this
-repository:
+Now unplug one of the workers. The lead marks it as lost and the other worker takes
+all the calls. Plug it back in and it rejoins.
 
-* **Arduino IDE:** copy `firmware/` to your sketchbook's `libraries/Muster` folder
-  (e.g. `Documents/Arduino/libraries/Muster`) and restart the IDE.
-* **PlatformIO:** point `lib_deps` at your checkout, as the examples do:
-  `lib_deps = symlink://path/to/MUSTER/firmware`.
+When we ran this on 7 November 2026 (an ESP32-C6 and two DevKits), joining, placement,
+failover and rejoining all worked, and each worker took about 900 µs on average to
+compute a call. That figure is the computation only. We haven't measured the radio
+round trip yet. The full results are in [`docs/TESTING.md`](docs/TESTING.md#hardware-results).
 
-Then `#define MUSTER_IMPLEMENTATION` in exactly one source file before
-`#include "muster.h"`, and include the link headers you use (see
-[Use the runtime directly](#use-the-runtime-directly-c-api)).
+If you don't have a C6, `pio run -e lead_esp32dev` turns a third classic ESP32 into the
+lead. The complete guide is in [`firmware/examples/trio`](firmware/examples/trio).
+
+## The dashboard
+
+Once a cluster is running, it's nice to see what it's doing. Muster has an optional
+dashboard that shows which board did what, how busy each one is, call latency and
+end-to-end delay, how loaded each link is, and failures and retries as they happen.
+
+<p align="center">
+  <img src="docs/images/muster-dashboard.png" alt="The Muster dashboard: summary tiles, a live topology with per-board load rings, delay and latency charts, throughput, a latency histogram and the share of calls per board" width="100%">
+  <br><sub><code>muster dash --demo</code>, which simulates a five-board cluster so you can try the page without hardware.</sub>
+</p>
+
+It's switched off by default, and while it's off it costs nothing. When you switch it
+on, the lead keeps a few counters (about 0.5 KB of RAM on an ESP32) and sends a small
+binary snapshot over USB a few times a second. Your PC does everything else.
+
+```cpp
+#define MUSTER_TELEMETRY 1          // in the lead's build only
+// then, four times a second in loop():
+uint16_t n = muster_telemetry_frame(&M, frame, sizeof frame);
+Serial.write(frame, n);
+```
+
+```bash
+muster dash --serial COM5 --open    # the page runs on your PC, not on the boards
+muster dash --demo                  # or try it now with simulated data
+```
+
+If there's no PC nearby, an ESP32 lead can serve the same page itself over WiFi using
+`muster_dashboard.h`. That costs about 74 KB of flash. [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
+explains what every number means, and [`firmware/examples/dashboard`](firmware/examples/dashboard)
+has a lead that's ready to flash.
+
+The dashboard is tested on the host, including decoding frames produced by the real C
+code, and the example compiles for ESP32. It hasn't been run against real boards yet.
+
+## How it works
+
+<p align="center">
+  <img src="docs/images/how-it-works.svg" alt="main.cpp and boards.yaml go through analyse, plan, validate and generate into per-board firmware; at run time the lead picks a board for each call" width="100%">
+</p>
+
+A few ideas hold the whole thing together:
+
+- **The code lives on the boards, and the choice is made at run time.** An 8-bit AVR
+  can't load new code while it runs, so every board is flashed with all the tasks it is
+  allowed to run. For each call, the lead picks one of the boards that has that task.
+- **Everything goes through the lead.** This hub-and-spoke layout is what keeps
+  failover and load balancing simple.
+- **Lost messages are retried, and repeats are ignored.** If a call is sent to the same
+  board twice, the board answers the second one from a small cache instead of running
+  the task again.
+- **There's no `malloc`, no threads and no recursion.** Everything is allocated
+  statically. A minimal worker on an ATmega328P uses 8.9 KB of flash and 492 B of RAM.
+
+Here's what happens when a board goes quiet:
+
+<p align="center">
+  <img src="docs/images/failover.svg" alt="Three panels: the lead sends call 7 to worker A; worker A goes silent; the lead declares it lost and resends call 7 to worker B" width="100%">
+</p>
+
+Boards can be connected in four ways:
+
+<p align="center">
+  <img src="docs/images/links.svg" alt="CAN and SPI are simulated; UART and ESP-NOW worked on hardware" width="100%">
+</p>
+
+You can mix them. A board can have up to eight links, and Muster sends each message
+over the fastest one that's working. If the SPI cable comes out, traffic falls back to
+CAN. [`docs/LINKS.md`](docs/LINKS.md) covers setup, limits and frame sizes for each link.
+
+## Installing the runtime
+
+The runtime is the [`firmware/`](firmware) folder. It's header files only, and it has the
+manifests both Arduino and PlatformIO expect. It isn't in the Arduino Library Manager or
+the PlatformIO Registry yet, so for now install it from this repository:
+
+- **Arduino IDE:** copy `firmware/` into your sketchbook as `libraries/Muster` (for
+  example `Documents/Arduino/libraries/Muster`) and restart the IDE.
+- **PlatformIO:** add `lib_deps = symlink://path/to/MUSTER/firmware` to your `platformio.ini`.
+
+In exactly one source file, put `#define MUSTER_IMPLEMENTATION` before
+`#include "muster.h"`, then include the link you want to use (see
+[Using the runtime directly](#using-the-runtime-directly)).
 
 ## Walkthrough: one program, four boards
 
-Three identical ESP32-S3 boards and a Nano. The full example is
-[`tools/muster-cli/examples/quadruped_modules`](tools/muster-cli/examples/quadruped_modules).
+As an example, let's split a robot-dog program across three ESP32-S3s and a Nano. The
+complete project is in [`tools/muster-cli/examples/quadruped_modules`](tools/muster-cli/examples/quadruped_modules).
 
-**`boards.yaml`** is your inventory. IDs are yours; types must exist in the
-[board database](tools/muster-cli/muster_cli/db/boards.yaml), which is also where all
-pins come from. Plans never contain pins.
+First, install the toolchain. It needs Python 3.9 or newer and [PlatformIO](https://platformio.org/).
+
+```bash
+pip install -e "tools/muster-cli[test]"
+```
+
+Then describe the boards you have in `boards.yaml`:
 
 ```yaml
-shared_images: true            # all ESP32s run ONE firmware image
+shared_images: true            # all the ESP32s run one firmware image
 boards:
   - { id: esp32_a, type: esp32-s3-devkitc-1, port: /dev/ttyUSB0 }
   - { id: esp32_b, type: esp32-s3-devkitc-1, port: /dev/ttyUSB1 }
@@ -182,39 +240,43 @@ boards:
   - { id: nano,    type: nanoatmega328,      port: /dev/ttyUSB3 }
 ```
 
-**`main.cpp`** is one program for every board:
+There are no pins in this file. Pins only ever come from the
+[board database](tools/muster-cli/muster_cli/db/boards.yaml), so nothing (not even an AI
+assistant) can make one up.
+
+Next, write one program for all of the boards, `main.cpp`:
 
 ```cpp
 #include <Arduino.h>
-#include "modules/status_led.h"          // a module kept in its own header
+#include "modules/status_led.h"
 
 struct Gait { float hip[4], knee[4]; };
 
-MUSTER_TASK(needs = fpu, cost = 800, ram = 24)     // a single call, placed live
+MUSTER_TASK(needs = fpu, cost = 800, ram = 24)     // placed per call, on a board with an FPU
 Gait gait_planner(float speed, float turn) { /* ... */ }
 
-MUSTER_TASK(cost = 20, ram = 1)
+MUSTER_TASK(cost = 20, ram = 1)                    // cheap enough for any board, even the Nano
 int16_t sensor_read(uint8_t channel) { return (int16_t)analogRead(channel); }
 
-MUSTER_MODULE(needs = fpu, ram = 16, count = 1)    // a long-running job the lead assigns
+MUSTER_MODULE(needs = fpu, ram = 16, count = 1)    // a long-running job the lead hands to one board
 int8_t gait_controller(uint8_t event);
 
 void setup() { Serial.begin(115200); muster_setup(); }
-void loop()  { muster_loop(); }                    // polls the bus, runs this board's modules
+void loop()  { muster_loop(); }
 
-int8_t gait_controller(uint8_t event) {            // defined after the generated glue,
-    if (event == MUSTER_MOD_RUN) {                 // so it can call tasks anywhere:
-        Gait g;
+int8_t gait_controller(uint8_t event) {
+    if (event == MUSTER_MOD_RUN) {
+        Gait g;   // runs on whichever board the lead picks: this one, or one across the bus
         if (muster_gait_planner(0.5f, 0.0f, &g, 300) == MUSTER_OK) { /* use g */ }
     }
     return 0;
 }
 ```
 
-`muster_gait_planner(...)` is generated: it runs the task on whichever live board the
-lead picks, locally or across the bus, and decodes the typed result.
+You don't write `muster_gait_planner()` yourself. Muster generates it, with typed
+arguments and a typed result.
 
-**`muster plan`** analyses, proposes, validates and generates:
+Finally, plan, build and flash:
 
 ```text
 $ muster plan boards.yaml main.cpp
@@ -230,109 +292,93 @@ $ muster plan boards.yaml main.cpp
       esp32_b    holds gait_planner, sensor_read
       esp32_c    holds gait_planner, sensor_read
       nano       holds sensor_read
-      module status_led: may run on esp32_a, esp32_b, esp32_c; the lead picks at run time
-      module gait_controller: may run on esp32_a, esp32_b, esp32_c; the lead picks at run time
       one image (esp32_s3_devkitc_1) for esp32_b, esp32_c: node IDs come from the chip
+
+$ muster build                         # compile every board
+$ muster deploy boards.yaml --dry-run  # show the upload commands (the lead goes last)
 ```
 
-Four boards, **three** firmware builds:
+That's four boards and three firmware builds. The two follower ESP32s share an image and
+take their node ID from the chip's MAC address. The Nano only gets `sensor_read`, since
+it has no FPU and only 2 KB of RAM.
 
-| Env | Boards | Node ID | Holds |
-|---|---|---|---|
-| `esp32_a` | `esp32_a` | 0 (the lead) | all tasks + modules, plus the "how many boards" counts |
-| `esp32_s3_devkitc_1` | `esp32_b`, `esp32_c` | from the chip's MAC, at run time | all tasks + modules |
-| `nano` | `nano` | fixed, 200 | `sensor_read` only (no FPU, 2 KB RAM) |
+At run time, the lead gives `gait_controller` to one of the ESP32s. If you unplug that
+board, the lead moves the module to another one.
 
-`muster build` compiles all three. `muster deploy boards.yaml` flashes every board,
-lead last, stopping at the first failure so the bus is not left half-flashed. Add
-`--dry-run` to print the upload commands without running them.
+<details>
+<summary><b>Tasks or modules?</b></summary>
 
-At run time the lead gives `gait_controller` to one live ESP32. Unplug that board and
-the lead re-places the module on another; plug it back and it rejoins.
-
-> **Shared-image caveat.** Boards of one type share an image, so each holds the union
-> of the tasks and modules any of them was given. The validator warns when that
-> widens a board's set. The lead decides at run time what each board actually does.
-
-## Simulate it (no hardware)
-[`firmware/examples/sim_cluster`](firmware/examples/sim_cluster) runs a lead and two
-workers inside **one** simulated ESP32-S3 ([Wokwi](https://wokwi.com): LEDs show each
-node's state, two buttons pull and replug the workers' cables). Pull the board running a
-module and watch the lead move it. This exercises the real runtime on the target CPU,
-**not** the CAN hardware: Wokwi runs one firmware per project and only partially
-implements the ESP32-S3's CAN controller, so two ESP32s talking CAN cannot be simulated
-there. The same logic runs as a host test (`test_sim_cluster`).
-
-## Tasks and modules
-
-|  | **Task** | **Module** |
+|  | Task | Module |
 |---|---|---|
-| What | One call: arguments in, result out | A long-running job: `START`, `RUN` (often), `STOP` |
-| Declared | `MUSTER_TASK(needs=, cost=, ram=)` | `MUSTER_MODULE(needs=, ram=, count=)` |
+| What it is | One call: arguments in, result out | A long-running job: `START`, then `RUN` often, then `STOP` |
+| How you declare it | `MUSTER_TASK(needs=, cost=, ram=)` | `MUSTER_MODULE(needs=, ram=, count=)` |
 | Signature | any wire-safe types | `int8_t name(uint8_t event)` |
-| Placed | per call, on the board that finishes soonest | per board, by the lead; moved if the board is lost |
-| State | none kept across boards | restarts from scratch when moved |
-| May call tasks | no (it runs inside the bus poll) | yes, including the blocking `muster_<task>()` stubs |
-| Can decline | no | `START` returns `< 0` (e.g. hardware missing); the lead tries another board |
+| Where it runs | per call, on the board that will finish soonest | per board, chosen by the lead; moved if the board is lost |
+| State | nothing is kept across boards | starts from scratch when it moves |
+| Can it call tasks? | no, it runs inside the bus poll | yes, including the blocking `muster_<task>()` stubs |
+| Can it refuse? | no | `START` can return `< 0` (for example if hardware is missing) and the lead tries another board |
 
-**What a task may take and return:** `uint8_t/16/32`, `int8_t/16/32`, `float`, `bool`,
-plain structs of those (nested), and fixed-size arrays of those. The validator
-rejects `int`, `long`, `unsigned`, `double`, `size_t`, pointers, references, enums,
-unions and bit-fields, with a message naming the fixed-width replacement. A task
-must not touch non-`const` globals (there is no shared memory across boards) and
-must be **idempotent or shorter than the call timeout** (see
-[Guarantees and limits](#guarantees-and-limits)).
+A task can take and return `uint8_t/16/32`, `int8_t/16/32`, `float`, `bool`, plain structs
+of those (nested is fine), and fixed-size arrays of those. `int`, `long`, `double`,
+`size_t`, pointers, references, enums, unions and bit-fields are rejected when you plan,
+with a message telling you what to use instead. The reason is that `int` is 16 bits on an
+AVR and 32 bits on an ESP32, and that kind of mismatch is miserable to track down on a
+live bus.
 
-## Command line
+</details>
 
-| Command | Does |
+<details>
+<summary><b>All the commands</b></summary>
+
+| Command | What it does |
 |---|---|
-| `muster boards` | Lists the board types Muster knows |
-| `muster analyze main.cpp` | Tasks, modules, wire types and problems (add `--json`) |
-| `muster plan boards.yaml main.cpp [--plan plan.json] [--out DIR]` | Validate a plan (default: the baseline) and generate the project |
-| `muster build [-e ENV ...]` | Compile every board's firmware (`pio run`) |
-| `muster deploy boards.yaml [--dry-run]` | Upload every board, lead last |
-| `muster mcp` | Serve the same operations to an MCP client over stdio |
+| `muster boards` | lists the board types Muster knows |
+| `muster analyze main.cpp` | shows tasks, modules, wire types and problems (add `--json`) |
+| `muster plan boards.yaml main.cpp [--plan plan.json] [--out DIR]` | validates a plan (the baseline by default) and generates the project |
+| `muster build [-e ENV ...]` | compiles every board's firmware (`pio run`) |
+| `muster deploy boards.yaml [--dry-run]` | uploads to every board, lead last, and stops at the first failure |
+| `muster dash --serial PORT` | opens the live dashboard for a running cluster ([details](docs/TELEMETRY.md)) |
+| `muster mcp` | offers all of this to an AI assistant over MCP |
 
-## Use it from an AI assistant (MCP)
+There's more in the [toolchain README](tools/muster-cli/README.md).
 
-`muster mcp` is a stdio [Model Context Protocol](https://modelcontextprotocol.io)
-server. The assistant makes the partitioning *judgement*, which is a few facts plus
-trade-offs; the toolchain stays deterministic.
+</details>
 
-| Tool | Purpose |
-|---|---|
-| `list_boards` | Board types, capabilities, RAM, limits |
-| `analyze_source` | Tasks, modules, sizes, problems in a sketch |
-| `baseline_plan` | The deterministic plan, as a yardstick |
-| `validate_plan` | Check any plan; errors are binding, warnings are advice |
-| `generate_project` | Re-validates, then writes the project (never skips validation) |
-| `render_wiring` | Wiring diagram from the board database |
-| `build_project` | Compile every board |
-| `deploy` | Upload every board, lead last. **Dry run unless `confirm=true`** |
+## Using it from an AI assistant
 
-Register it with Claude Code (or any MCP client) once the CLI is on your `PATH`:
+`muster mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server, so an
+assistant like Claude Code can read your sketch, suggest how to split it, and build it.
 
 ```bash
 claude mcp add muster -- muster mcp
 ```
 
-The assistant cannot invent pins or skip the validator: pins come only from the
-database, and no plan reaches code generation without passing `validate()`.
+After that you can just ask, for example: "Split my robot sketch across these four boards
+and build it."
 
-## Use the runtime directly (C API)
+The assistant gets eight tools (`list_boards`, `analyze_source`, `baseline_plan`,
+`validate_plan`, `generate_project`, `render_wiring`, `build_project` and `deploy`), and a
+few rules it can't get around. The validator always has the final say, so a bad plan (an
+FPU task on the Nano, say) is rejected and nothing is generated. Pins only come from the
+board database, so it can't invent wiring. And `deploy` only prints what it would do
+unless it's explicitly called with `confirm=true`.
 
-You can use `muster.h` without the toolchain. It is one header; define
-`MUSTER_IMPLEMENTATION` in exactly one source file.
+## Using the runtime directly
+
+If you don't want the toolchain, you can use `muster.h` by hand. It's a single header.
+
+<details>
+<summary><b>A complete worker in about 25 lines</b></summary>
 
 ```cpp
 #define MUSTER_IMPLEMENTATION
 #include "muster.h"
-#include "muster_link_twai.h"            // CAN on an ESP32; muster_link_mcp2515.h for a Nano
+#include "muster_link_twai.h"            // CAN on an ESP32 (muster_link_mcp2515.h for a Nano)
 
 enum { TASK_DOUBLE = 1 };
 
-// A task: decode arguments, compute, encode the result. The toolchain writes these.
+// A task decodes its arguments, computes, and encodes the result.
+// (The toolchain normally writes these for you.)
 static int16_t double_tr(const uint8_t *args, uint16_t len, uint8_t *ret, uint16_t cap) {
     muster_rbuf r; muster_wbuf w;
     muster_r_init(&r, args, len);
@@ -353,176 +399,262 @@ void setup() {
     muster_register_task(&M, TASK_DOUBLE, double_tr, /*cost*/ 10);
 }
 
-void loop() { muster_poll(&M); }         // call from ONE context only
+void loop() { muster_poll(&M); }         // call it from one place only
 ```
 
-Calling a task wherever the lead places it:
+To call a task wherever the lead decides to run it:
 
 ```cpp
 uint8_t args[2], out[2]; uint16_t n = 0;
 muster_wbuf w; muster_w_init(&w, args, sizeof args); muster_put_i16(&w, 21);
 int8_t st = muster_call(&M, TASK_DOUBLE, args, w.n, out, sizeof out, &n, /*timeout ms*/ 500);
-// st == MUSTER_OK -> decode `out`; otherwise MUSTER_ENOHOST / ETIMEOUT / ETASK / ERR
-// Non-blocking: muster_call_async() then muster_result() until it stops returning MUSTER_PENDING.
+// st == MUSTER_OK means `out` holds the answer (42). Otherwise you get
+// MUSTER_ENOHOST, MUSTER_ETIMEOUT, MUSTER_ETASK or MUSTER_ERR.
+// For a non-blocking call, use muster_call_async(), then muster_result() until it
+// stops returning MUSTER_PENDING.
 ```
 
-Other links attach the same way: `muster_mcp2515_begin()` (Nano CAN),
-`muster_spi_master_begin()` / `muster_spi_slave_begin()`, `muster_uart_attach()` and
-`muster_espnow_begin()`. Add more than one with `muster_add_link()`. All of them are
-described in [`docs/LINKS.md`](docs/LINKS.md).
+The other links attach in the same way: `muster_mcp2515_begin()`,
+`muster_spi_master_begin()` and `muster_spi_slave_begin()`, `muster_uart_attach()` and
+`muster_espnow_begin()`. To use more than one, add them with `muster_add_link()`.
 
-Working examples: [`firmware/examples`](firmware/examples) (`lead_esp32`,
-`worker_esp32`, `worker_nano` on CAN, `trio` on ESP-NOW, `sim_cluster` in a simulator).
-**Never** send raw structs or native `int`/`double` on the wire; use
-`muster_put_*` / `muster_get_*`.
+One rule matters more than the rest: never put raw structs or native `int` or `double`
+values on the wire. Always go through `muster_put_*` and `muster_get_*`, which use fixed
+widths and little-endian byte order.
 
-## Configuration
+</details>
 
-Every limit is a macro, sized at compile time. Override with `-D` flags; the AVR
-column shows the automatic defaults for a 2 KB ATmega328P.
+<details>
+<summary><b>Configuration</b></summary>
+
+Every limit is a compile-time macro that you can override with a `-D` flag. The AVR
+column shows what you get automatically on a 2 KB ATmega328P.
 
 | Macro | Default | AVR | Meaning |
 |---|---|---|---|
-| `MUSTER_MAX_NODES` | 8 | 4 | Boards the lead tracks (max 8) |
-| `MUSTER_MAX_TASKS` | 16 | 16 | Task IDs (max 32) |
-| `MUSTER_MAX_MODULES` | 8 | 0 | Module IDs (max 8; `0` compiles modules out) |
-| `MUSTER_MAX_MSG` | 96 | 40 | Largest reassembled message, bytes |
+| `MUSTER_MAX_NODES` | 8 | 4 | Boards the lead keeps track of (at most 8) |
+| `MUSTER_MAX_TASKS` | 16 | 16 | Task IDs (at most 32) |
+| `MUSTER_MAX_MODULES` | 8 | 0 | Module IDs (at most 8; `0` leaves modules out entirely) |
+| `MUSTER_MAX_MSG` | 96 | 40 | Largest reassembled message, in bytes |
 | `MUSTER_MAX_PENDING` | 6 | 2 | Calls in flight |
-| `MUSTER_RX_SLOTS` | 4 | 2 | Concurrent reassemblies |
-| `MUSTER_MAX_LINKS` | 2 | 1 | Links per board (max 8) |
-| `MUSTER_MAX_FRAME` | 64 | 64 | Must be ≥ every link's MTU |
-| `MUSTER_DEDUPE` | 4 | 1 | Finished calls remembered for resends |
-| `MUSTER_HEARTBEAT_MS` | 200 | 200 | Heartbeat period |
-| `MUSTER_NODE_TIMEOUT_MS` | 1000 | 1000 | A silent peer is declared lost |
-| `MUSTER_CALL_TIMEOUT_MS` | 400 | 400 | Then the lead retries or moves the call |
-| `MUSTER_MAX_RETRIES` | 2 | 2 | Per call |
-| `MUSTER_LEAD_PENALTY` | 3000 | 3000 | Cost of running a task on the lead (it has its own job) |
+| `MUSTER_RX_SLOTS` | 4 | 2 | Messages being reassembled at once |
+| `MUSTER_MAX_LINKS` | 2 | 1 | Links per board (at most 8) |
+| `MUSTER_MAX_FRAME` | 64 | 64 | Must be at least every link's MTU |
+| `MUSTER_DEDUPE` | 4 | 1 | Finished calls remembered, so a resend isn't run twice |
+| `MUSTER_HEARTBEAT_MS` | 200 | 200 | How often boards send a heartbeat |
+| `MUSTER_NODE_TIMEOUT_MS` | 1000 | 1000 | After this much silence a board is declared lost |
+| `MUSTER_CALL_TIMEOUT_MS` | 400 | 400 | After this the lead retries or moves the call |
+| `MUSTER_MAX_RETRIES` | 2 | 2 | Retries per call |
+| `MUSTER_LEAD_PENALTY` | 3000 | 3000 | The cost of running a task on the lead, which has its own job to do |
+| `MUSTER_TELEMETRY` | 0 | 0 | Set it to 1 in the lead's build to enable the [dashboard](docs/TELEMETRY.md) |
+
+</details>
 
 ## Guarantees and limits
 
-**Guaranteed (and tested on simulated buses):** a lost frame is retried; a resend to
-the same board is answered from its duplicate cache and runs once; a silent board is
-declared lost and its calls and modules are moved; large messages are fragmented and
-reassembled per link; a pulled SPI cable falls back to CAN.
+Here is what Muster promises, all of it tested on simulated links. A lost frame is
+retried. A resend to the same board is answered from that board's cache, so the task only
+runs once. A board that goes silent is declared lost, and its calls and modules move to
+other boards. Large messages are split into frames and put back together. If an SPI cable
+is pulled, traffic falls back to CAN.
 
-**Limits, by design and documented:**
+There are also some limits. They're all deliberate, and [`docs/DECISIONS.md`](docs/DECISIONS.md)
+explains each one.
 
-* **At-least-once across boards.** A call moved to *another* board (the first went
-  silent, for example stuck in a task longer than `MUSTER_CALL_TIMEOUT_MS`) can run
-  twice. Keep tasks idempotent or shorter than the call timeout.
-* **A task or module step longer than `MUSTER_NODE_TIMEOUT_MS`** gets its board
-  declared lost. Tasks run inside `muster_poll()` and must not call `muster_call()`.
-* **Hub and spoke:** worker→worker calls go through the lead.
-* **The lead must know every task's cost** (the generated setup does this for you).
-* **Max 8 nodes**, 32 task IDs, 8 modules, 8 links; 8-bit call IDs. No checksum in
-  the core: CAN has hardware CRC, the SPI and UART links add CRC-16, and ESP-NOW frames
-  carry the 802.11 checksum.
-* **Moving a module loses its state.** Placement is not migration.
-* **No authentication or encryption on any link.** Anything on the CAN bus, and any
-  ESP-NOW radio in range on the same channel, can speak Muster. Do not use it where that matters without adding your own protection.
-  Muster is not a safety-certified system.
+- **A call that moves to another board can run twice.** If a board goes quiet in the
+  middle of a task and the lead gives the call to someone else, both boards may end up
+  running it. So keep tasks safe to repeat, or shorter than `MUSTER_CALL_TIMEOUT_MS`.
+- **Tasks shouldn't hog the CPU.** A task or module step that takes longer than
+  `MUSTER_NODE_TIMEOUT_MS` will get its board declared lost. Tasks run inside
+  `muster_poll()` and must not call `muster_call()`.
+- **Everything goes through the lead.** A worker calling another worker is relayed.
+- **The lead needs to know what every task costs.** The generated code takes care of this.
+- **There are size limits:** 8 boards, 32 task IDs, 8 modules, 8 links and 8-bit call IDs.
+- **The core has no checksum of its own**, because the links already have one: CAN has a
+  hardware CRC, SPI and UART add a CRC-16, and ESP-NOW frames carry the 802.11 checksum.
+- **A module loses its state when it moves.** It starts again on the new board.
+- **Nothing is authenticated or encrypted.** Anything on your CAN bus, or any ESP-NOW
+  radio in range on the same channel, can talk to Muster. Use it on hardware you control,
+  and don't use it for anything safety-critical.
 
-Why each of these is the way it is: [`docs/DECISIONS.md`](docs/DECISIONS.md).
+## Which boards work
 
-## Supported boards
+Muster's core is plain C99 with no dynamic memory, so it builds almost anywhere
+there's a C compiler. To check that properly rather than guess, there's a small
+self-test sketch, [`firmware/examples/portability`](firmware/examples/portability). It runs a
+lead and two workers inside a single chip, unplugs one, and prints `MUSTER SELFTEST: PASS`
+or `FAIL` over serial. It compiles for 22 boards across AVR, megaAVR, ESP32, ESP8266, STM32
+(F1, F4, G4), RP2040, nRF52, SAMD21/51, SAM3X, NXP (Teensy 4.1, 3.6, LC) and Renesas
+(Uno R4). **[`docs/BOARDS.md`](docs/BOARDS.md) has the full list**, with memory use and what
+has actually run on real boards (so far, only the ESP32 trio).
 
-**In the toolchain's board database** (`muster plan` can generate projects for these):
+For the toolchain (`muster plan`) the board database currently has two boards:
 
-| Board type | CPU | RAM | CAN | Can run |
+| Board | CPU | RAM | CAN via | Can do |
 |---|---|---|---|---|
-| `esp32-s3-devkitc-1` | 2 × Xtensa 240 MHz, FPU | 512 KB | on-chip TWAI + SN65HVD230 | tasks, modules, can lead |
-| `nanoatmega328` | ATmega328P 16 MHz | 2 KB | MCP2515 + TJA1050 module | tasks (no FPU, no modules) |
+| ESP32-S3 DevKitC-1 (`esp32-s3-devkitc-1`) | 2 × 240 MHz, FPU | 512 KB | on-chip TWAI + SN65HVD230 | tasks, modules, can lead |
+| Arduino Nano (`nanoatmega328`) | ATmega328P, 16 MHz | 2 KB | MCP2515 + TJA1050 | tasks (no FPU, no modules) |
 
-Generated projects use CAN (TWAI or MCP2515). For another transport, build with
-`MUSTER_GEN_LINK_EXTERNAL` and provide `muster_link *muster_gen_external_link(void)`.
+Generated projects talk over CAN. For another link, build with `MUSTER_GEN_LINK_EXTERNAL`
+and provide `muster_link *muster_gen_external_link(void)` yourself. Every other board in
+`docs/BOARDS.md` works with the runtime used directly. If you'd like `muster plan` to
+support your board, add a datasheet-backed entry to the database (please don't guess
+pinouts) and follow [`docs/HARDWARE.md`](docs/HARDWARE.md) for wiring and bring-up.
 
-**Used with the runtime directly**, in the hand-written [`trio`](firmware/examples/trio)
-example: the classic **ESP32 DevKit** (worker, or lead with `lead_esp32dev`) and the
-**ESP32-C6** (lead; it has no FPU). These aren't in the board database yet, so
-`muster plan` can't target them.
+## FAQ
 
-Pins and electrical facts come **only** from
-[`db/boards.yaml`](tools/muster-cli/muster_cli/db/boards.yaml). To add a board, add a
-datasheet-backed entry there (never guess a pinout), then see
-[`docs/HARDWARE.md`](docs/HARDWARE.md) for the wiring and the bring-up order.
+<details>
+<summary><b>Do I need WiFi or an internet connection?</b></summary>
+
+No. CAN, SPI and UART are wires. ESP-NOW uses the ESP32's radio directly, without a
+router or the internet. The `trio` lead runs its own small access point, but only to
+serve its web page.
+
+</details>
+
+<details>
+<summary><b>What happens if the lead dies?</b></summary>
+
+The workers can't get new calls until the lead is back. When it restarts, every worker
+rejoins on its own (this is tested in simulation). There's no automatic election of a
+new lead yet.
+
+</details>
+
+<details>
+<summary><b>Can an Arduino Nano be the lead?</b></summary>
+
+The validator allows it, but a Nano lead can only keep track of four boards instead of
+eight. In practice an ESP32 makes a much better lead, and the toolchain picks the board
+with the most RAM by default.
+
+</details>
+
+<details>
+<summary><b>Will a task ever run twice?</b></summary>
+
+Not on the same board, since resends are answered from a cache. On two different boards
+it can happen, if the first board went quiet partway through a task and the lead moved
+the call. So make tasks safe to repeat, or keep them shorter than the call timeout. Pure
+maths functions are ideal.
+
+</details>
+
+<details>
+<summary><b>Does the dashboard slow the boards down?</b></summary>
+
+Not unless you turn it on. When it's off, the code isn't compiled in at all, and the
+Nano worker is byte-for-byte the same size. When it's on, it only runs on the lead: a few
+counter updates per message, plus a few hundred bytes over USB a few times a second. The
+page itself runs on your PC.
+
+</details>
+
+<details>
+<summary><b>Why not use MQTT, micro-ROS or something bigger?</b></summary>
+
+Those are good choices on boards with an operating system or plenty of RAM. Muster is
+aimed at the other end of the scale: an 8-bit Nano with 2 KB of RAM working alongside
+ESP32s, with no OS, no heap and no broker. The whole runtime is one C99 header.
+
+</details>
+
+<details>
+<summary><b>Is it ready for production?</b></summary>
+
+Not yet. It's a student project that's well tested in simulation, and the UART and
+ESP-NOW links have run on real boards. CAN and SPI still need to be brought up on
+hardware. Please don't use it for anything safety-critical.
+
+</details>
 
 ## Status
 
 | Milestone | State |
 |---|---|
-| M0–M3 Runtime, hardening, multi-link core, SPI link (host side) | ✅ verified on simulated buses |
-| M6 Typed trampoline generator (libclang) | ✅ generated project compiles for every board |
-| M9 MCP server | ✅ tested in-process and over a real pipe; not yet driven from a live client session |
-| M10 Shared images + lead-assigned modules (protocol v3) | ✅ simulated + compiles; **not run on boards** |
-| M4 CAN hardware bring-up | ⬜ drivers compile; **unverified on hardware** |
-| M5 SPI hardware | ⬜ drivers compile; **unverified on hardware** |
-| UART + ESP-NOW links | ✅ simulated, and **run on hardware** (2026-11-07): ESP-NOW trio with failover; UART worked ([results](docs/TESTING.md#hardware-results)) |
-| M8 Telemetry and dashboard | ⬜ not built |
-| M7 Local LLM evaluation | superseded by MCP (decision 21) |
+| M0–M3: runtime, hardening, multi-link core, SPI link (host side) | Done, verified on simulated buses |
+| M6: typed trampoline generator (libclang) | Done, the generated project compiles for every board |
+| M8: telemetry and dashboard | Done and host-tested; the example compiles; **not run on boards** |
+| M9: MCP server | Done, tested in-process and over a real stdio pipe |
+| M10: shared images and lead-assigned modules (protocol v3) | Done in simulation and compiles; **not run on boards** |
+| UART and ESP-NOW links | Simulated, and **run on hardware** on 2026-11-07 (ESP-NOW `trio` with failover; UART worked). See the [results](docs/TESTING.md#hardware-results) |
+| M4: CAN hardware bring-up | Drivers compile; **not yet run on hardware** |
+| M5: SPI hardware | Drivers compile; **not yet run on hardware** |
+| Portability across MCU families | The self-test compiles for [22 boards](docs/BOARDS.md) (2026-11-07); **not flashed to them yet** |
+| M7: local LLM evaluation | Replaced by the MCP server (decision 21) |
 
-**Measured:** 193 host checks pass in C99 and C++11 (failover, duplicate suppression,
-5 % frame loss, CAN + SPI routing, SPI bit-flip recovery, UART resync, ESP-NOW at 10 %
-loss, modules, ID clashes);
-74 toolchain tests; a minimal ATmega328P worker is **8.9 KB flash and 492 B static
-RAM** (`make -C firmware/test avr`). On hardware (ESP-NOW `trio`): about 900 µs average
-compute time per call on an ESP32 worker. **Not measured yet:** real link latency
-(CAN, UART or ESP-NOW round trip), bus load, failover time, the MAC read on the ESP32-S3, or the CAN behaviour while two
-boards briefly share an ID. Full acceptance criteria: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+In numbers: 215 host checks pass in C99 and C++11, and there are 83 toolchain tests. A
+minimal ATmega328P worker takes 8.9 KB of flash and 492 B of static RAM, and the
+self-test cluster fits on everything from a 2 KB Uno to a Teensy 4.1. On the ESP-NOW
+`trio`, an ESP32 worker averaged about 900 µs of compute per call.
 
-## Repository layout
+We haven't measured real link latency yet (the round trip on CAN, UART or ESP-NOW), nor
+bus load, failover time, the MAC read on the ESP32-S3, or how CAN behaves while two boards
+briefly share an ID. The roadmap and acceptance criteria are in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## What's in the repository
 
 ```text
 firmware/
-  src/muster.h              the whole runtime: one C99 header
-  src/muster_link_*.h       transports: twai, mcp2515 (CAN) · spi · uart · espnow · loopback (tests)
+  src/muster.h              the whole runtime, in one C99 header
+  src/muster_link_*.h       links: twai, mcp2515 (CAN) · spi · uart · espnow · loopback (tests)
+  src/muster_dashboard.h    optional: an ESP32 lead serves the dashboard itself
   library.properties/.json  Arduino and PlatformIO library manifests
-  test/                     host tests, simulated buses, `make` targets
-  examples/                 PlatformIO projects: lead_esp32, worker_esp32, worker_nano (CAN/SPI),
-                            sim_cluster (Wokwi), trio (ESP-NOW + dashboard); see examples/README.md
+  test/                     host tests and simulated buses (make)
+  examples/                 lead_esp32, worker_esp32, worker_nano (CAN/SPI) · sim_cluster (Wokwi)
+                            · trio (ESP-NOW) · dashboard · portability: see examples/README.md
 tools/muster-cli/
-  muster_cli/               analyse · partition · validate · codegen · pio · wiring · mcp
+  muster_cli/               analyse · partition · validate · codegen · pio · wiring · mcp · dash
   muster_cli/db/boards.yaml the only source of pins and board facts
   examples/                 quadruped, quadruped_modules
-  tests/                    toolchain tests
-docs/                       protocol, architecture, links, specs, hardware, testing, decisions, roadmap
+docs/                       protocol, architecture, links, boards, telemetry, hardware, testing, decisions, roadmap
 ```
-
-## Documentation
 
 | Read | When you want to |
 |---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | understand the layers, the contracts and the memory model |
+| [`docs/LINKS.md`](docs/LINKS.md) | choose and connect a link: CAN, SPI, UART or ESP-NOW |
+| [`docs/BOARDS.md`](docs/BOARDS.md) | find out whether your board works |
+| [`docs/TELEMETRY.md`](docs/TELEMETRY.md) | understand the numbers on the dashboard |
+| [`docs/HARDWARE.md`](docs/HARDWARE.md) | wire up boards and avoid the usual afternoon-wasting mistakes |
+| [`firmware/examples/README.md`](firmware/examples/README.md) | pick an example to start from |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | understand the layers and the memory model |
 | [`docs/PROTOCOL.md`](docs/PROTOCOL.md) | see the wire format (version 3) and every message flow |
-| [`docs/MULTILINK_SPEC.md`](docs/MULTILINK_SPEC.md), [`docs/SPI_LINK_SPEC.md`](docs/SPI_LINK_SPEC.md) | use CAN and SPI together |
-| [`docs/LINKS.md`](docs/LINKS.md) | pick and attach a transport: CAN, SPI, UART, ESP-NOW |
-| [`docs/HARDWARE.md`](docs/HARDWARE.md) | wire boards and bring up a bus |
-| [`firmware/examples/README.md`](firmware/examples/README.md) | find an example to start from |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | learn why things are the way they are |
-| [`docs/TESTING.md`](docs/TESTING.md) | see what is tested and how |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | see milestones and their acceptance criteria |
-| [`CHANGELOG.md`](CHANGELOG.md) | see what changed |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), [`SECURITY.md`](SECURITY.md) | contribute, or report a problem |
+| [`docs/MULTILINK_SPEC.md`](docs/MULTILINK_SPEC.md), [`docs/SPI_LINK_SPEC.md`](docs/SPI_LINK_SPEC.md) | run CAN and SPI together |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | find out why things are the way they are |
+| [`docs/TESTING.md`](docs/TESTING.md) | see what's tested, and the hardware results |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | see what's planned |
+| [`CHANGELOG.md`](CHANGELOG.md) | see what has changed |
 
 ## Contributing
 
-Contributions are welcome, especially **hardware bring-up results** (M4/M5, UART, ESP-NOW), new
-board entries, and bug reports with a failing host test. Please read
-[`CONTRIBUTING.md`](CONTRIBUTING.md) first: it lists the hard rules (no dynamic
-allocation, fixed-width wire types, the AVR memory budget) and the checks every
-change must pass. For vulnerabilities, see [`SECURITY.md`](SECURITY.md).
+We'd be glad of help, especially with these:
+
+- **Hardware results.** Bring up CAN (M4) or SPI (M5) on real boards, measure UART or
+  ESP-NOW latency, or flash the portability self-test to a board we haven't tried. Please
+  open a *Hardware report* issue either way, whether it worked or not.
+- **New boards** in the database, backed by a datasheet.
+- **Bug reports that come with a failing host test.** Those are the most useful kind.
+
+Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) first. It lists the few hard rules (no
+dynamic allocation, fixed-width wire types, the AVR memory budget) and the checks every
+change has to pass. We follow a [Code of Conduct](CODE_OF_CONDUCT.md), and security issues
+go through [`SECURITY.md`](SECURITY.md).
 
 ## License
 
-Muster is free software under the **GNU General Public License v3.0 only**
-([`LICENSE`](LICENSE), SPDX `GPL-3.0-only`). Copyright © 2026 The Muster contributors.
+Muster is free software under the GNU General Public License v3.0 only ([`LICENSE`](LICENSE),
+SPDX `GPL-3.0-only`). Copyright © 2026 The Muster contributors.
 
-`muster.h` is copied into every project the toolchain generates, so firmware you
-build with Muster is a combined work and has to be distributable under GPL-3.0
-terms. If that does not fit your use, open an issue to discuss it. This is a
-description, not legal advice.
+One thing worth knowing: `muster.h` is copied into every project the toolchain generates,
+so firmware you build with Muster is a combined work and has to be distributable under
+GPL-3.0. If that doesn't suit your project, open an issue and we can talk about it. (This
+is a plain description, not legal advice.)
 
-## Authors
+## Who made this
 
-Shaik Ayman Hameed Baig, Abhinav Senthil and Lahari, Department of Electronics and Communication
-Engineering, SRMIST, built as the project for *21ECC301P: Microprocessor,
-Microcontroller and Interfacing Techniques*.
+Muster was written by Shaik Ayman Hameed Baig, Abhinav Senthil and Lahari, in the
+Department of Electronics and Communication Engineering at SRMIST. It started as our
+project for *21ECC301P: Microprocessor, Microcontroller and Interfacing Techniques* and
+grew from there.
+
+If Muster helped your boards get along, a star on GitHub would make our day.

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" width="1200" height="380" role="img" aria-labelledby="t d">
+  <title id="t">From one program to many boards</title>
+  <desc id="d">main.cpp and boards.yaml go through analyse, plan, validate and generate, producing one firmware per board. At run time the lead picks which board runs each call.</desc>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8d97b5"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="380" rx="24" fill="#111a30"/>
+
+  <g font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+    <text x="40" y="52" font-size="24" font-weight="700" fill="#ffffff">At your desk</text>
+    <text x="40" y="78" font-size="16" fill="#8d97b5">muster plan · muster build · muster deploy</text>
+    <text x="40" y="252" font-size="24" font-weight="700" fill="#ffffff">On the bench</text>
+    <text x="40" y="278" font-size="16" fill="#8d97b5">the lead decides, live, per call</text>
+  </g>
+
+  <!-- input files -->
+  <g font-family="ui-monospace, 'Cascadia Code', Consolas, monospace" font-size="15">
+    <path d="M40 104 h90 l18 18 v62 h-108 z" fill="#1e293b" stroke="#475569"/>
+    <path d="M130 104 v18 h18" fill="none" stroke="#475569"/>
+    <text x="52" y="146" fill="#e2e8f0">main.cpp</text>
+    <text x="52" y="168" fill="#64748b">TASK()</text>
+    <path d="M168 104 h90 l18 18 v62 h-108 z" fill="#1e293b" stroke="#475569"/>
+    <path d="M258 104 v18 h18" fill="none" stroke="#475569"/>
+    <text x="178" y="146" fill="#e2e8f0">boards</text>
+    <text x="178" y="166" fill="#e2e8f0">.yaml</text>
+  </g>
+
+  <!-- pipeline steps -->
+  <g font-family="'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">
+    <g stroke="#8d97b5" stroke-width="2.5" marker-end="url(#arr)">
+      <line x1="284" y1="144" x2="318" y2="144"/>
+      <line x1="452" y1="144" x2="486" y2="144"/>
+      <line x1="620" y1="144" x2="654" y2="144"/>
+      <line x1="788" y1="144" x2="822" y2="144"/>
+    </g>
+    <rect x="322" y="104" width="128" height="80" rx="14" fill="#1d3a5f"/>
+    <text x="386" y="140" font-size="19" font-weight="700" fill="#b5d4ff">analyse</text>
+    <text x="386" y="164" font-size="13" fill="#8fb3e0">finds tasks + types</text>
+
+    <rect x="490" y="104" width="128" height="80" rx="14" fill="#3b2a5c"/>
+    <text x="554" y="140" font-size="19" font-weight="700" fill="#dcbcff">plan</text>
+    <text x="554" y="164" font-size="13" fill="#bda3e6">who may run what</text>
+
+    <!-- validator = shield -->
+    <rect x="658" y="104" width="128" height="80" rx="14" fill="#14403a"/>
+    <path d="M722 114 l18 7 v14 c0 11 -8 18 -18 22 c-10 -4 -18 -11 -18 -22 v-14 z" fill="#2dd4bf"/>
+    <path d="M714 135 l6 6 l11 -12" fill="none" stroke="#0b2a26" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="722" y="176" font-size="15" font-weight="700" fill="#9cf2e4">validate</text>
+
+    <rect x="826" y="104" width="128" height="80" rx="14" fill="#4a3410"/>
+    <text x="890" y="140" font-size="19" font-weight="700" fill="#f8d48a">generate</text>
+    <text x="890" y="164" font-size="13" fill="#d8b46a">typed glue + pio</text>
+  </g>
+  <text x="722" y="210" font-family="'Segoe UI', system-ui, sans-serif" font-size="13" fill="#64748b" text-anchor="middle">bad plan? nothing gets built</text>
+
+  <!-- firmware images -->
+  <g stroke="#8d97b5" stroke-width="2.5" fill="none" marker-end="url(#arr)">
+    <path d="M954 130 C985 130 990 118 1010 118"/>
+    <path d="M954 144 L1010 144"/>
+    <path d="M954 158 C985 158 990 170 1010 170"/>
+  </g>
+  <g font-family="ui-monospace, Consolas, monospace" font-size="13">
+    <rect x="1014" y="104" width="150" height="26" rx="6" fill="#0f766e"/><text x="1026" y="122" fill="#e6fffb">lead.bin</text>
+    <rect x="1014" y="132" width="150" height="26" rx="6" fill="#0f766e"/><text x="1026" y="150" fill="#e6fffb">esp32.bin  ×2</text>
+    <rect x="1014" y="160" width="150" height="26" rx="6" fill="#1d4ed8"/><text x="1026" y="178" fill="#e6f0ff">nano.hex</text>
+  </g>
+
+  <!-- runtime row -->
+  <line x1="40" y1="226" x2="1160" y2="226" stroke="#26324d" stroke-dasharray="6 8"/>
+  <g font-family="'Segoe UI', system-ui, sans-serif" font-size="15">
+    <!-- lead -->
+    <rect x="330" y="292" width="150" height="56" rx="12" fill="#b7791f"/>
+    <path d="M385 288 l7 -16 l13 11 l13 -11 l7 16 z" fill="#ffd166" stroke="#7a5200" stroke-width="1.5"/>
+    <text x="405" y="326" text-anchor="middle" font-weight="700" fill="#fff7e6">lead</text>
+    <!-- bubble -->
+    <g>
+      <rect x="500" y="246" width="250" height="40" rx="12" fill="#26324d"/>
+      <path d="M500 278 l-14 14 l26 -8 z" fill="#26324d"/>
+      <text x="625" y="271" text-anchor="middle" fill="#e2e8f0">"filter() → who's free? ESP32 #2!"</text>
+    </g>
+    <!-- bus -->
+    <line x1="480" y1="320" x2="1160" y2="320" stroke="#f5b942" stroke-width="5" stroke-linecap="round" stroke-opacity="0.75"/>
+    <g fill="#14b8a6">
+      <rect x="530" y="300" width="160" height="44" rx="10"/>
+      <rect x="720" y="300" width="180" height="44" rx="10" stroke="#7CFFB2" stroke-width="4"/>
+    </g>
+    <rect x="930" y="300" width="150" height="44" rx="10" fill="#3b82f6"/>
+    <g text-anchor="middle" fill="#ffffff">
+      <text x="610" y="327">ESP32 #1 · busy</text>
+      <text x="810" y="327" font-weight="700">ESP32 #2 · runs it</text>
+      <text x="1005" y="327">Nano · no FPU</text>
+    </g>
+  </g>
+</svg>

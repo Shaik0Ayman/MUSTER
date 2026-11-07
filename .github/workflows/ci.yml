@@ -19,13 +19,28 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        example: [lead_esp32, worker_esp32, worker_nano, sim_cluster, trio, trio/node_selftest]
+        example: [lead_esp32, worker_esp32, worker_nano, sim_cluster, trio, trio/node_selftest, dashboard]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install platformio
       - run: pio run -d firmware/examples/${{ matrix.example }}
+
+  portability:                      # one self-test sketch, many MCU families (docs/BOARDS.md)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [uno, nano, mega2560, nano_every, esp32, esp32_s3, esp32_c3, esp32_s2, esp8266,
+              bluepill_f103, blackpill_f411, nucleo_f446, nucleo_g431, pico, nano33ble,
+              zero_samd21, metro_m4_samd51, due_sam3x, teensy41, teensy36, teensylc, uno_r4_minima]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install platformio
+      - run: pio run -d firmware/examples/portability -e ${{ matrix.env }}
 
   toolchain:
     runs-on: ubuntu-latest

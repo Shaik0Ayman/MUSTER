@@ -112,6 +112,15 @@ extern "C"
 #ifndef MUSTER_LEAD_PENALTY
 #define MUSTER_LEAD_PENALTY 3000u
 #endif
+/* Telemetry for the dashboard (lead only). 0 compiles every counter out, so
+ * boards that don't need it pay nothing; 1 costs roughly 300-500 B of RAM on
+ * the lead (see docs/TELEMETRY.md) and a few counter updates per message.  */
+#ifndef MUSTER_TELEMETRY
+#define MUSTER_TELEMETRY 0
+#endif
+#ifndef MUSTER_TEL_EVENTS
+#define MUSTER_TEL_EVENTS 8 /* recent events carried in each snapshot */
+#endif
 
 #if MUSTER_MAX_NODES > 8
 #error "MUSTER_MAX_NODES > 8 needs a wider retry mask"
@@ -130,6 +139,9 @@ extern "C"
 #endif
 #if MUSTER_DEDUPE < 1
 #error "MUSTER_DEDUPE must be at least 1"
+#endif
+#if MUSTER_TELEMETRY && (MUSTER_TEL_EVENTS < 1 || MUSTER_TEL_EVENTS > 32)
+#error "MUSTER_TEL_EVENTS must be 1..32"
 #endif
 
 #define MUSTER_PROTO_VERSION 3u
@@ -234,6 +246,9 @@ extern "C"
         int8_t status;
         uint16_t len, args_crc;
         uint32_t sent_at;
+#if MUSTER_TELEMETRY
+        uint32_t t_start_us, t0_us; /* call created / last dispatched */
+#endif
         uint8_t buf[MUSTER_MAX_MSG]; /* args while in flight, then result */
     } muster_pending;
 
@@ -254,6 +269,39 @@ extern "C"
         uint16_t len;
         uint8_t buf[MUSTER_MAX_RET];
     } muster_done;
+
+#if MUSTER_TELEMETRY
+    /* Counters only grow (and wrap); the dashboard turns them into rates from
+     * two snapshots, so the board never divides or keeps a time window.      */
+    typedef struct
+    {
+        uint32_t ok, failed, retries; /* attempts on this board              */
+        uint32_t busy_us;             /* sum of attempt latencies: load      */
+        uint32_t lat_last, lat_avg, lat_min, lat_max; /* per attempt, us     */
+    } muster_tel_node;
+    typedef struct
+    {
+        uint32_t tx_frames, tx_bytes, rx_frames, rx_bytes, tx_fail;
+    } muster_tel_link;
+    typedef struct
+    {
+        uint16_t seq;
+        uint8_t ev, a, b;
+        uint32_t t_ms;
+    } muster_tel_event;
+    typedef struct
+    {
+        uint32_t (*micros)(void);
+        uint16_t seq, ev_seq;
+        uint8_t ev_head;
+        uint32_t ok, failed, retries;                    /* calls, end to end */
+        uint32_t delay_last, delay_avg, delay_max;       /* call -> result, us */
+        uint16_t hist[8];                                /* attempt latency    */
+        muster_tel_node node[MUSTER_MAX_NODES];          /* parallel to nodes  */
+        muster_tel_link link[MUSTER_MAX_LINKS];
+        muster_tel_event ev[MUSTER_TEL_EVENTS];
+    } muster_tel;
+#endif
 
     typedef struct
     {
@@ -277,6 +325,9 @@ extern "C"
         muster_done done[MUSTER_DEDUPE]; /* duplicate suppression  */
         muster_event_fn on_event;
         void *event_user;
+#if MUSTER_TELEMETRY
+        muster_tel tel;
+#endif
     } muster_t;
 
     /* ----------------------------------------------------------------- API */
@@ -334,6 +385,20 @@ extern "C"
     /* introspection, for dashboards and tests (lead only) */
     uint8_t muster_alive_count(const muster_t *m);
     const muster_node *muster_node_by_id(const muster_t *m, uint8_t id);
+
+    /* Telemetry (docs/TELEMETRY.md). Both calls exist whatever
+     * MUSTER_TELEMETRY is, so a sketch compiles with it on or off; when off
+     * they do nothing and the frame is empty.
+     * A microsecond clock makes latencies precise; without one they are
+     * millis() * 1000.                                                       */
+    void muster_set_micros(muster_t *m, uint32_t (*micros)(void));
+    /* Lead: write one telemetry snapshot (binary, CRC-protected) into buf.
+     * Returns its length, or 0 if telemetry is off, this is not the lead, or
+     * cap < MUSTER_TEL_FRAME_MAX. Send the bytes as they are (e.g. Serial). */
+    uint16_t muster_telemetry_frame(muster_t *m, uint8_t *buf, uint16_t cap);
+#define MUSTER_TEL_VERSION 1u
+#define MUSTER_TEL_FRAME_MAX (7u + 50u + 24u * MUSTER_MAX_LINKS + 49u * MUSTER_MAX_NODES + \
+                              1u + 9u * MUSTER_TEL_EVENTS)
 
     /* ---------------------------------------------- wire encoding helpers */
     typedef struct
@@ -469,8 +534,51 @@ enum
 #define M_TASK_MASK ((1ul << MUSTER_MAX_TASKS) - 1ul)
 #endif
 
+#if MUSTER_TELEMETRY
+static uint32_t m_us(muster_t *m)
+{
+    return m->tel.micros ? m->tel.micros() : m->millis() * 1000u;
+}
+
+/* One attempt on node row `row` finished after `lat` us. */
+static void m_tel_attempt(muster_t *m, uint8_t row, int ok, uint32_t lat)
+{
+    static const uint32_t edge[7] = {500u, 1000u, 2000u, 5000u, 10000u, 20000u, 50000u};
+    muster_tel_node *t;
+    uint8_t b = 0;
+    if (row >= MUSTER_MAX_NODES)
+        return;
+    t = &m->tel.node[row];
+    if (ok)
+        t->ok++;
+    else
+        t->failed++;
+    t->busy_us += lat;
+    t->lat_last = lat;
+    if (t->ok + t->failed == 1u || lat < t->lat_min)
+        t->lat_min = lat;
+    if (lat > t->lat_max)
+        t->lat_max = lat;
+    /* average over roughly the last 8 attempts, no division by a count */
+    t->lat_avg = (t->ok + t->failed == 1u) ? lat
+                                            : (uint32_t)((int32_t)t->lat_avg + ((int32_t)(lat - t->lat_avg) >> 3));
+    while (b < 7u && lat >= edge[b])
+        b++;
+    m->tel.hist[b]++;
+}
+#endif
+
 static void m_event(muster_t *m, uint8_t ev, uint8_t a, uint8_t b)
 {
+#if MUSTER_TELEMETRY
+    muster_tel_event *e = &m->tel.ev[m->tel.ev_head];
+    e->seq = ++m->tel.ev_seq;
+    e->ev = ev;
+    e->a = a;
+    e->b = b;
+    e->t_ms = m->millis();
+    m->tel.ev_head = (uint8_t)((m->tel.ev_head + 1u) % MUSTER_TEL_EVENTS);
+#endif
     if (m->on_event)
         m->on_event(ev, a, b, m->event_user);
 }
@@ -496,7 +604,16 @@ static int m_send_on(muster_t *m, uint8_t lk, uint8_t dst,
         for (k = 0; k < n; k++, off++)
             frame[F_HDR + k] = off < hl ? h[off] : p[off - hl];
         if (l->send(l, dst, frame, (uint16_t)(n + F_HDR)) != 0)
+        {
+#if MUSTER_TELEMETRY
+            m->tel.link[lk].tx_fail++;
+#endif
             return -1;
+        }
+#if MUSTER_TELEMETRY
+        m->tel.link[lk].tx_frames++;
+        m->tel.link[lk].tx_bytes += (uint32_t)(n + F_HDR);
+#endif
         idx++;
     } while (off < len);
     return 0;
@@ -806,6 +923,9 @@ static muster_node *m_node_add(muster_t *m, uint8_t id)
     if (!spare)
         return 0;
     memset(spare, 0, sizeof *spare);
+#if MUSTER_TELEMETRY
+    memset(&m->tel.node[spare - m->nodes], 0, sizeof m->tel.node[0]); /* a new board, new stats */
+#endif
     spare->used = 1;
     spare->id = id;
     return spare;
@@ -886,6 +1006,9 @@ static muster_pending *m_pend_alloc(muster_t *m)
             m->pend[i].call_id = m->next_call++;
             m->pend[i].node = MUSTER_NO_NODE;
             m->pend[i].status = MUSTER_PENDING;
+#if MUSTER_TELEMETRY
+            m->pend[i].t_start_us = m_us(m);
+#endif
             return &m->pend[i];
         }
     return 0;
@@ -894,6 +1017,22 @@ static muster_pending *m_pend_alloc(muster_t *m)
 static void m_finish(muster_t *m, muster_pending *p, int8_t status,
                      const uint8_t *ret, uint16_t len)
 {
+#if MUSTER_TELEMETRY
+    if (m->is_lead)
+    {
+        uint32_t d = m_us(m) - p->t_start_us;
+        if (status == MUSTER_OK)
+            m->tel.ok++;
+        else
+            m->tel.failed++;
+        m->tel.delay_last = d;
+        if (d > m->tel.delay_max)
+            m->tel.delay_max = d;
+        m->tel.delay_avg = (m->tel.ok + m->tel.failed == 1u)
+                               ? d
+                               : (uint32_t)((int32_t)m->tel.delay_avg + ((int32_t)(d - m->tel.delay_avg) >> 3));
+    }
+#endif
     m_release(m, p);
     if (p->origin != m->id)
     { /* relay to the asker  */
@@ -935,12 +1074,18 @@ static void m_dispatch(muster_t *m, muster_pending *p, uint8_t idx)
     p->tried |= (uint8_t)(1u << idx);
     p->node = idx;
     p->sent_at = m->millis();
+#if MUSTER_TELEMETRY
+    p->t0_us = m_us(m);
+#endif
     m->nodes[idx].inflight++;
     m->nodes[idx].queued += m_cost(m, p->task);
     m_event(m, MUSTER_EV_PLACED, p->task, m->nodes[idx].id);
     if (m->nodes[idx].id == m->id)
     { /* the lead is best     */
         st = m_run_local(m, p->task, p->buf, p->len, out, sizeof out, &out_len);
+#if MUSTER_TELEMETRY
+        m_tel_attempt(m, idx, st == MUSTER_OK, m_us(m) - p->t0_us);
+#endif
         m_event(m, MUSTER_EV_DONE, p->task, m->id);
         m_finish(m, p, st, out, out_len);
     }
@@ -1250,6 +1395,11 @@ static void m_on_result(muster_t *m, muster_rbuf *r, const uint8_t *b, uint16_t 
             /* any board this call was sent to may answer; the first wins */
             if (row == MUSTER_NO_NODE || !(p->tried & (1u << row)))
                 continue;
+#if MUSTER_TELEMETRY
+            /* timed from the latest dispatch: a late answer from an earlier
+             * board after a retry reads as fast, which is rare and harmless */
+            m_tel_attempt(m, row, st == MUSTER_OK, m_us(m) - p->t0_us);
+#endif
             m_event(m, MUSTER_EV_DONE, p->task, src);
             m_finish(m, p, st, ret, rl);
         }
@@ -1498,6 +1648,10 @@ static void m_poll_lead(muster_t *m, uint32_t now)
         if (again)
             m_route_demote(m, &nd->rt, p->sent_at, now);
         m_event(m, MUSTER_EV_RETRY, p->task, nd->id);
+#if MUSTER_TELEMETRY
+        m->tel.node[idx].retries++;
+        m->tel.retries++;
+#endif
         m_release(m, p);
         if (++p->retries > MUSTER_MAX_RETRIES)
         {
@@ -1658,7 +1812,13 @@ void muster_poll(muster_t *m)
     {
         muster_link *l = m->links[lk];
         while ((n = l->recv(l, &src, frame, sizeof frame)) > 0)
+        {
+#if MUSTER_TELEMETRY
+            m->tel.link[lk].rx_frames++;
+            m->tel.link[lk].rx_bytes += n;
+#endif
             m_rx_frame(m, lk, src, frame, n);
+        }
     }
     now = m->millis();
     for (i = 0; i < MUSTER_RX_SLOTS; i++) /* stale reassembly    */
@@ -1795,6 +1955,110 @@ const muster_node *muster_node_by_id(const muster_t *m, uint8_t id)
 {
     uint8_t i = m_node_row(m, id);
     return i == MUSTER_NO_NODE ? 0 : &m->nodes[i];
+}
+
+void muster_set_micros(muster_t *m, uint32_t (*micros)(void))
+{
+#if MUSTER_TELEMETRY
+    m->tel.micros = micros;
+#else
+    (void)m;
+    (void)micros;
+#endif
+}
+
+/* Frame: 'M' 'T' | version | payload length (u16) | payload | crc16
+ * (crc over version, length and payload). Layout: docs/TELEMETRY.md.      */
+uint16_t muster_telemetry_frame(muster_t *m, uint8_t *buf, uint16_t cap)
+{
+#if MUSTER_TELEMETRY
+    muster_wbuf w;
+    uint8_t i, n = 0, k;
+    uint16_t crc;
+    if (!m->is_lead || cap < MUSTER_TEL_FRAME_MAX)
+        return 0;
+    for (i = 0; i < MUSTER_MAX_NODES; i++)
+        n = (uint8_t)(n + (m->nodes[i].used ? 1u : 0u));
+    muster_w_init(&w, buf, cap);
+    muster_put_u8(&w, 'M');
+    muster_put_u8(&w, 'T');
+    muster_put_u8(&w, MUSTER_TEL_VERSION);
+    muster_put_u16(&w, 0); /* length, filled in below */
+    muster_put_u16(&w, ++m->tel.seq);
+    muster_put_u32(&w, m->millis());
+    muster_put_u8(&w, m->id);
+    muster_put_u8(&w, m->nlinks);
+    muster_put_u8(&w, n);
+    muster_put_u8(&w, (uint8_t)(m->tel.micros ? 1u : 0u));
+    muster_put_u32(&w, m->tel.ok);
+    muster_put_u32(&w, m->tel.failed);
+    muster_put_u32(&w, m->tel.retries);
+    muster_put_u32(&w, m->tel.delay_last);
+    muster_put_u32(&w, m->tel.delay_avg);
+    muster_put_u32(&w, m->tel.delay_max);
+    for (k = 0; k < 8u; k++)
+        muster_put_u16(&w, m->tel.hist[k]);
+    for (i = 0; i < m->nlinks; i++)
+    {
+        const muster_tel_link *t = &m->tel.link[i];
+        muster_put_u16(&w, m->links[i]->kbps);
+        muster_put_u16(&w, m->links[i]->mtu);
+        muster_put_u32(&w, t->tx_frames);
+        muster_put_u32(&w, t->tx_bytes);
+        muster_put_u32(&w, t->rx_frames);
+        muster_put_u32(&w, t->rx_bytes);
+        muster_put_u32(&w, t->tx_fail);
+    }
+    for (i = 0; i < MUSTER_MAX_NODES; i++)
+    {
+        const muster_node *nd = &m->nodes[i];
+        const muster_tel_node *t = &m->tel.node[i];
+        if (!nd->used)
+            continue;
+        muster_put_u8(&w, nd->id);
+        muster_put_u8(&w, nd->alive);
+        muster_put_u8(&w, nd->cores);
+        muster_put_u8(&w, nd->flags);
+        muster_put_u8(&w, nd->inflight);
+        muster_put_u16(&w, nd->clock_mhz);
+        muster_put_u16(&w, nd->ram_kb);
+        muster_put_u32(&w, nd->uid);
+        muster_put_u32(&w, nd->queued);
+        muster_put_u32(&w, t->ok);
+        muster_put_u32(&w, t->failed);
+        muster_put_u32(&w, t->retries);
+        muster_put_u32(&w, t->busy_us);
+        muster_put_u32(&w, t->lat_last);
+        muster_put_u32(&w, t->lat_avg);
+        muster_put_u32(&w, t->lat_min);
+        muster_put_u32(&w, t->lat_max);
+    }
+    /* recent events, oldest first; the host drops the ones it has seen by seq */
+    k = (uint8_t)(m->tel.ev_seq < MUSTER_TEL_EVENTS ? m->tel.ev_seq : MUSTER_TEL_EVENTS);
+    muster_put_u8(&w, k);
+    for (i = 0; i < k; i++)
+    {
+        const muster_tel_event *e =
+            &m->tel.ev[(m->tel.ev_head + MUSTER_TEL_EVENTS - k + i) % MUSTER_TEL_EVENTS];
+        muster_put_u16(&w, e->seq);
+        muster_put_u32(&w, e->t_ms);
+        muster_put_u8(&w, e->ev);
+        muster_put_u8(&w, e->a);
+        muster_put_u8(&w, e->b);
+    }
+    if (w.err)
+        return 0;
+    buf[3] = (uint8_t)(w.n - 5u);
+    buf[4] = (uint8_t)((w.n - 5u) >> 8);
+    crc = muster_crc16(buf + 2, (uint16_t)(w.n - 2u));
+    muster_put_u16(&w, crc);
+    return w.err ? 0 : w.n;
+#else
+    (void)m;
+    (void)buf;
+    (void)cap;
+    return 0;
+#endif
 }
 
 #endif /* MUSTER_IMPLEMENTED */

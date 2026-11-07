@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 HTML = re.search(r'R"TRIOHTML\((.*)\)TRIOHTML"',
-                 (Path(__file__).parent.parent / "muster_trio" / "dashboard.h").read_text(), re.S).group(1)
+                 (Path(__file__).parent.parent / "muster_trio" / "dashboard.h").read_text(encoding="utf-8"), re.S).group(1)
 T0 = time.time()
 BOARDS = [  # name, lead, node, uid, chip, cpu, heap, base busy us
     ("Lead", 1, 0, "A1B2C3D4", 2, 160, 212000, 9800),

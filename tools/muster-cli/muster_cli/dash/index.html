@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Muster Dashboard</title>
+<style>
+:root{--bg:#070b16;--bg2:#0d1428;--card:#111a31cc;--line:#1f2b4a;--text:#e6ebf5;--mute:#8a96b5;--dim:#56617f;
+--lead:#f5b942;--ok:#34d399;--warn:#fbbf24;--bad:#f87171;--a1:#22d3ee;--a2:#a78bfa;--a3:#60a5fa;--a4:#f472b6;--a5:#34d399;
+--glow:0 0 0 1px #ffffff08,0 10px 30px #0006;--r:16px}
+@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#eef2f9;--bg2:#e2e8f4;--card:#ffffffd9;--line:#d6deec;--text:#101828;--mute:#5b6884;--dim:#97a3bb;--glow:0 0 0 1px #0000000a,0 8px 24px #1e293b14}}
+:root[data-theme=light]{--bg:#eef2f9;--bg2:#e2e8f4;--card:#ffffffd9;--line:#d6deec;--text:#101828;--mute:#5b6884;--dim:#97a3bb;--glow:0 0 0 1px #0000000a,0 8px 24px #1e293b14}
+*{box-sizing:border-box}
+html,body{margin:0;background:radial-gradient(1200px 600px at 10% -10%,#22d3ee1a,transparent 60%),radial-gradient(900px 500px at 110% 0%,#a78bfa1f,transparent 60%),var(--bg);color:var(--text);
+font:14px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;min-height:100vh}
+.wrap{max-width:1400px;margin:0 auto;padding:18px 16px 40px}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;letter-spacing:-.3px}
+.logo svg{filter:drop-shadow(0 0 10px #f5b94266)}
+.sub{color:var(--mute);font-size:13px}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:12.5px;color:var(--mute);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.live .dot{background:var(--ok);box-shadow:0 0 0 0 #34d39999;animation:pulse 1.6s infinite}
+.stale .dot{background:var(--warn)}.off .dot{background:var(--bad)}
+@keyframes pulse{70%{box-shadow:0 0 0 8px #34d39900}100%{box-shadow:0 0 0 0 #34d39900}}
+button.pill{cursor:pointer;font:inherit}
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--glow);padding:14px 16px;backdrop-filter:blur(6px);min-width:0}
+.k .v{font-size:28px;font-weight:750;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.15}
+.k .v small{font-size:14px;color:var(--mute);font-weight:600;margin-left:3px}
+.k .l{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
+.k .t{font-size:12px;margin-top:6px;color:var(--dim);font-variant-numeric:tabular-nums}
+.k .bar{height:4px;border-radius:4px;background:var(--line);margin-top:8px;overflow:hidden}
+.k .bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--a1),var(--a2));width:0;transition:width .5s}
+.row2{grid-template-columns:minmax(0,1.05fr) minmax(0,1.6fr);margin-bottom:14px}
+.row3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);margin-bottom:14px}
+@media (max-width:1000px){.row2,.row3{grid-template-columns:1fr}}
+h2{margin:0 0 10px;font-size:12px;letter-spacing:.9px;text-transform:uppercase;color:var(--mute);font-weight:700;display:flex;align-items:center;gap:8px}
+h2 .h{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;color:var(--dim)}
+canvas{display:block;width:100%}
+#topo{width:100%;height:330px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--mute);margin-top:8px}
+.legend b{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.boards{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-bottom:14px}
+.bd{position:relative;overflow:hidden}
+.bd .top{display:flex;align-items:center;gap:10px}
+.bd .name{font-weight:700;font-size:15px}
+.bd .meta{color:var(--mute);font-size:12px}
+.bd .tag{margin-left:auto;font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mute)}
+.bd.alive .tag{color:var(--ok);border-color:#34d39955}.bd.dead .tag{color:var(--bad);border-color:#f8717155}
+.bd.dead{opacity:.62}
+.bd .ring{display:flex;align-items:center;gap:14px;margin:12px 0 8px}
+.bd .ring svg{flex:none}
+.bd .big{font-size:24px;font-weight:750;font-variant-numeric:tabular-nums}
+.bd .big small{font-size:12px;color:var(--mute);font-weight:500}
+.kv{display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12.5px;font-variant-numeric:tabular-nums}
+.kv span:nth-child(odd){color:var(--mute)}
+.kv span:nth-child(even){text-align:right}
+.spark{height:34px;margin-top:8px}
+.links .lk{margin-bottom:12px}
+.links .lk:last-child{margin-bottom:0}
+.lk .t{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+.lk .t b{font-weight:650}
+.meter{height:9px;border-radius:9px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;width:0;border-radius:9px;transition:width .5s}
+.lk .s{display:flex;gap:12px;flex-wrap:wrap;color:var(--dim);font-size:11.5px;margin-top:5px;font-variant-numeric:tabular-nums}
+#feed{max-height:250px;overflow:auto;font-size:12.5px}
+.ev{display:grid;grid-template-columns:62px 22px 1fr;gap:6px;padding:5px 2px;border-bottom:1px dashed var(--line);align-items:center}
+.ev:last-child{border-bottom:0}
+.ev time{color:var(--dim);font-variant-numeric:tabular-nums}
+.ev .i{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:800}
+.empty{color:var(--dim);font-size:13px;padding:20px 0;text-align:center}
+.banner{display:none;margin-bottom:14px;padding:10px 14px;border-radius:12px;border:1px solid #fbbf2455;background:#fbbf2414;color:var(--warn);font-size:13px}
+footer{color:var(--dim);font-size:12px;margin-top:18px;text-align:center}
+footer a{color:var(--mute)}
+.tip{border-bottom:1px dotted var(--dim);cursor:help}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="logo">
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><path d="M9 11l3-7 5 4 5-4 3 7z" fill="#ffd166"/><rect x="5" y="12" width="24" height="17" rx="5" fill="#f5b942"/><rect x="13" y="16" width="8" height="8" rx="2" fill="#0b1020"/></svg>
+    <div>Muster<div class="sub" id="subtitle">cluster dashboard</div></div>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill" id="src">source: …</span>
+  <span class="pill" id="uptime">lead up —</span>
+  <span class="pill off" id="state"><span class="dot"></span><span id="stateText">connecting</span></span>
+  <button class="pill" id="theme" title="Switch light/dark">◐</button>
+</header>
+
+<div class="banner" id="banner"></div>
+
+<section class="grid kpis">
+  <div class="card k"><div class="v" id="kAlive">–</div><div class="l">boards alive</div><div class="t" id="kAliveT">&nbsp;</div></div>
+  <div class="card k"><div class="v" id="kRate">–</div><div class="l">calls / second</div><div class="t" id="kRateT">&nbsp;</div></div>
+  <div class="card k"><div class="v" id="kDelay">–</div><div class="l"><span class="tip" title="End to end, as the caller sees it: from muster_call to the result, including retries and failover. Average of about the last 8 calls.">delay (avg)</span></div><div class="t" id="kDelayT">&nbsp;</div></div>
+  <div class="card k"><div class="v" id="kP95">–</div><div class="l"><span class="tip" title="Per attempt: from the lead dispatching a call to a board until that board's result arrives. Estimated from the latency histogram over the last ~10 s.">latency p50 / p95</span></div><div class="t" id="kP95T">&nbsp;</div></div>
+  <div class="card k"><div class="v" id="kOk">–</div><div class="l">success rate</div><div class="t" id="kOkT">&nbsp;</div><div class="bar"><i id="kOkBar"></i></div></div>
+  <div class="card k"><div class="v" id="kUtil">–</div><div class="l"><span class="tip" title="Average across live workers of the share of time each had a call in flight, as seen by the lead.">cluster load</span></div><div class="t" id="kUtilT">&nbsp;</div><div class="bar"><i id="kUtilBar"></i></div></div>
+</section>
+
+<section class="grid row2">
+  <div class="card"><h2>Topology <span class="h">line width = calls/s · ring = load</span></h2><svg id="topo" viewBox="0 0 520 330" role="img" aria-label="Cluster topology"></svg></div>
+  <div class="card"><h2>Delay &amp; latency <span class="h" id="chartH">last 2 min</span></h2><canvas id="cLat" height="250"></canvas><div class="legend" id="latLegend"></div></div>
+</section>
+
+<section class="grid row3">
+  <div class="card"><h2>Throughput <span class="h">calls/s</span></h2><canvas id="cRate" height="170"></canvas></div>
+  <div class="card"><h2>Latency spread <span class="h">attempts, last ~10 s</span></h2><canvas id="cHist" height="170"></canvas></div>
+  <div class="card"><h2>Who did the work <span class="h">share of calls</span></h2><canvas id="cShare" height="170"></canvas><div class="legend" id="shareLegend"></div></div>
+</section>
+
+<h2 style="margin:4px 2px 10px">Boards</h2>
+<section class="grid boards" id="boards"><div class="card empty">Waiting for the first snapshot…</div></section>
+
+<section class="grid row2">
+  <div class="card links"><h2>Links <span class="h"><span class="tip" title="Muster payload bytes (both directions) against the link's nominal rate. Ignores CAN bit stuffing and radio overhead, so the true wire load is higher.">payload load</span></span></h2><div id="links"><div class="empty">No links yet</div></div></div>
+  <div class="card"><h2>Cluster events <span class="h" id="evH"></span></h2><div id="feed"><div class="empty">Nothing yet</div></div></div>
+</section>
+
+<footer>Muster telemetry v1 · counters from the lead (<code>MUSTER_TELEMETRY</code>) · rates computed in your browser ·
+<a href="https://github.com/Shaik0Ayman/MUSTER/blob/main/docs/TELEMETRY.md">what these numbers mean</a></footer>
+</div>
+
+<script>
+"use strict";
+const POLL_MS = 500, HISTORY_MS = 120000, RATE_WIN_MS = 2000, HIST_WIN_MS = 10000;
+const EDGES = [500,1000,2000,5000,10000,20000,50000];
+const EVN = {1:"JOINED",2:"LOST",3:"PLACED",4:"DONE",5:"RETRY",6:"ACCEPTED",7:"VERSION",8:"REFUSED",9:"MODULE_START",10:"MODULE_STOP",11:"IDCLASH"};
+const PAL = ["#f5b942","#22d3ee","#a78bfa","#60a5fa","#f472b6","#34d399","#fb923c","#e879f9"];
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+/* ---------- decode one frame (docs/TELEMETRY.md) ---------- */
+function crc16(b, s, e){let c=0xFFFF;for(let i=s;i<e;i++){c^=b[i]<<8;for(let k=0;k<8;k++)c=(c&0x8000)?((c<<1)^0x1021)&0xFFFF:(c<<1)&0xFFFF;}return c;}
+function decode(buf){
+  const b = new Uint8Array(buf), n = b.length;
+  if (n < 7 || b[0] !== 77 || b[1] !== 84 || b[2] !== 1) throw new Error("not a telemetry frame");
+  const plen = b[3] | b[4] << 8;
+  if (plen + 7 !== n) throw new Error("length mismatch");
+  if (crc16(b, 2, n - 2) !== (b[n-2] | b[n-1] << 8)) throw new Error("bad CRC");
+  const v = new DataView(b.buffer, b.byteOffset + 5, plen); let o = 0;
+  const u8=()=>v.getUint8(o++), u16=()=>{const x=v.getUint16(o,true);o+=2;return x}, u32=()=>{const x=v.getUint32(o,true);o+=4;return x};
+  const s = {seq:u16(), t_ms:u32(), lead:u8()}; const nl=u8(), nn=u8(); s.has_us=!!(u8()&1);
+  s.ok=u32(); s.failed=u32(); s.retries=u32(); s.delay_last=u32(); s.delay_avg=u32(); s.delay_max=u32();
+  s.hist=[]; for(let i=0;i<8;i++) s.hist.push(u16());
+  s.links=[]; for(let i=0;i<nl;i++) s.links.push({kbps:u16(),mtu:u16(),tx_frames:u32(),tx_bytes:u32(),rx_frames:u32(),rx_bytes:u32(),tx_fail:u32()});
+  s.nodes=[]; for(let i=0;i<nn;i++){const d={id:u8(),alive:!!u8(),cores:u8(),flags:u8(),inflight:u8(),clock_mhz:u16(),ram_kb:u16(),uid:u32(),queued:u32(),ok:u32(),failed:u32(),retries:u32(),busy_us:u32(),lat_last:u32(),lat_avg:u32(),lat_min:u32(),lat_max:u32()};d.lead=d.id===s.lead;s.nodes.push(d);}
+  const ne=u8(); s.events=[]; for(let i=0;i<ne;i++) s.events.push({seq:u16(),t_ms:u32(),ev:u8(),a:u8(),b:u8()});
+  return s;
+}
+
+/* ---------- state ---------- */
+let hist = [], last = null, lastNew = 0, source = "", events = new Map(), lastEvSeq = null, missed = 0;
+const series = {t:[], rate:[], delay:[], lat:{}};
+const colorOf = {}; let nextColor = 1;
+const col = id => colorOf[id] || (colorOf[id] = id === (last && last.lead) ? PAL[0] : PAL[(nextColor++ % (PAL.length-1)) + 1]);
+const d32 = (a, b) => (a - b) >>> 0, d16 = (a, b) => (a - b) & 0xFFFF;
+const fmtUs = us => us >= 1e6 ? (us/1e6).toFixed(2)+" s" : us >= 1e4 ? (us/1e3).toFixed(0)+" ms" : us >= 1e3 ? (us/1e3).toFixed(1)+" ms" : Math.round(us)+" µs";
+const fmtN = x => x >= 1e6 ? (x/1e6).toFixed(1)+"M" : x >= 1e4 ? (x/1e3).toFixed(1)+"k" : String(Math.round(x));
+const fmtT = ms => {const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s/60)%60;return (h?h+"h ":"")+m+"m "+String(s%60).padStart(2,"0")+"s";};
+const nameOf = n => n.lead ? "Lead" : n.clock_mhz <= 20 ? "Node "+n.id+" · AVR" : "Node "+n.id;
+
+function older(ms){ for (let i = hist.length - 1; i >= 0; i--) if (last.t_ms - hist[i].t_ms >= ms) return hist[i]; return hist[0]; }
+
+/* ---------- derive everything from two snapshots ---------- */
+function derive(){
+  const p = older(RATE_WIN_MS), dt = Math.max(1, last.t_ms - p.t_ms) / 1000;
+  const ph = older(HIST_WIN_MS);
+  const D = {dt, rate: d32(last.ok + last.failed, p.ok + p.failed) / dt, nodes: [], links: []};
+  const prevNode = id => p.nodes.find(n => n.id === id);
+  let utilSum = 0, utilCnt = 0, totalCalls = 0;
+  for (const n of last.nodes){
+    const q = prevNode(n.id) || n;
+    const calls = d32(n.ok + n.failed, q.ok + q.failed);
+    const util = Math.min(100, d32(n.busy_us, q.busy_us) / (dt * 1e6) * 100);
+    const x = {...n, rate: calls / dt, util, calls};
+    totalCalls += n.ok + n.failed;
+    if (n.alive && !n.lead){ utilSum += util; utilCnt++; }
+    D.nodes.push(x);
+  }
+  for (const x of D.nodes) x.share = totalCalls ? (x.ok + x.failed) / totalCalls * 100 : 0;
+  D.util = utilCnt ? utilSum / utilCnt : 0;
+  last.links.forEach((l, i) => {
+    const q = p.links[i] || l, bytes = d32(l.tx_bytes, q.tx_bytes) + d32(l.rx_bytes, q.rx_bytes);
+    D.links.push({...l, i, fps: (d32(l.tx_frames, q.tx_frames) + d32(l.rx_frames, q.rx_frames)) / dt,
+      bps: bytes / dt, load: l.kbps ? Math.min(100, bytes * 8 / (l.kbps * 1000 * dt) * 100) : 0, fails: d32(l.tx_fail, q.tx_fail)});
+  });
+  const hd = last.hist.map((h, i) => d16(h, ph.hist[i]));
+  const tot = hd.reduce((a, b) => a + b, 0);
+  const pct = q => { if (!tot) return null; let acc = 0; for (let i = 0; i < 8; i++){ acc += hd[i]; if (acc >= q * tot) return i < 7 ? EDGES[i] : EDGES[6] * 2; } return null; };
+  D.hist = hd; D.histTot = tot; D.p50 = pct(.5); D.p95 = pct(.95);
+  return D;
+}
+
+/* ---------- drawing helpers ---------- */
+function setupCanvas(c){
+  const r = window.devicePixelRatio || 1, w = c.clientWidth, h = +c.getAttribute("height");
+  if (c.width !== Math.round(w * r)){ c.width = Math.round(w * r); c.height = Math.round(h * r); c.style.height = h + "px"; }
+  const g = c.getContext("2d"); g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, w, h); return [g, w, h];
+}
+function lineChart(c, lines, yFmt){
+  const [g, w, h] = setupCanvas(c), L = 46, R = 8, T = 8, B = 20;
+  const all = lines.flatMap(l => l.pts.map(p => p[1])).filter(v => v != null);
+  const tmax = series.t.length ? series.t[series.t.length-1] : 1, tmin = tmax - HISTORY_MS;
+  let ymax = Math.max(1, ...all) * 1.15;
+  g.font = "11px Segoe UI, system-ui, sans-serif"; g.fillStyle = css("--dim"); g.strokeStyle = css("--line"); g.lineWidth = 1;
+  for (let k = 0; k <= 4; k++){ const y = T + (h-T-B) * k / 4; g.globalAlpha = .7; g.beginPath(); g.moveTo(L, y); g.lineTo(w-R, y); g.stroke(); g.globalAlpha = 1; g.fillText(yFmt(ymax * (1 - k/4)), 4, y + 4); }
+  for (let s = 0; s <= 120; s += 30){ const x = L + (w-L-R) * (1 - s/120); g.fillText(s ? "-"+s+"s" : "now", x - (s ? 12 : 22), h - 5); }
+  const X = t => L + (w-L-R) * (t - tmin) / HISTORY_MS, Y = v => T + (h-T-B) * (1 - v / ymax);
+  for (const l of lines){
+    const pts = l.pts.filter(p => p[1] != null && p[0] >= tmin); if (pts.length < 2) continue;
+    if (l.fill){ const gr = g.createLinearGradient(0, T, 0, h-B); gr.addColorStop(0, l.color + "55"); gr.addColorStop(1, l.color + "00");
+      g.beginPath(); g.moveTo(X(pts[0][0]), h-B); pts.forEach(p => g.lineTo(X(p[0]), Y(p[1]))); g.lineTo(X(pts[pts.length-1][0]), h-B); g.closePath(); g.fillStyle = gr; g.fill(); }
+    g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])));
+    g.strokeStyle = l.color; g.lineWidth = l.width || 2; g.setLineDash(l.dash || []); g.lineJoin = "round"; g.stroke(); g.setLineDash([]);
+  }
+}
+function histChart(c, D){
+  const [g, w, h] = setupCanvas(c), labels = ["<.5","<1","<2","<5","<10","<20","<50","50+"], B = 30, T = 14;
+  const max = Math.max(1, ...D.hist), bw = (w - 10) / 8;
+  g.font = "11px Segoe UI, system-ui, sans-serif"; g.textAlign = "center";
+  D.hist.forEach((v, i) => {
+    const bh = (h - B - T) * v / max, x = 5 + i * bw + 4, y = h - B - bh;
+    const gr = g.createLinearGradient(0, y, 0, h - B); gr.addColorStop(0, i >= 6 ? "#f87171" : i >= 4 ? "#fbbf24" : "#22d3ee"); gr.addColorStop(1, "#a78bfa33");
+    g.fillStyle = gr; roundRect(g, x, y, bw - 8, Math.max(bh, v ? 3 : 1), 5); g.fill();
+    g.fillStyle = css("--mute"); if (v) g.fillText(fmtN(v), x + (bw-8)/2, y - 4);
+    g.fillStyle = css("--dim"); g.fillText(labels[i], x + (bw-8)/2, h - 14);
+  });
+  g.fillText("milliseconds", w / 2, h - 1); g.textAlign = "left";
+}
+function donut(c, D){
+  const [g, w, h] = setupCanvas(c), cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 8, tot = D.nodes.reduce((a, n) => a + n.share, 0);
+  let a0 = -Math.PI / 2; g.lineWidth = 22;
+  if (!tot){ g.strokeStyle = css("--line"); g.beginPath(); g.arc(cx, cy, r - 11, 0, 7); g.stroke(); return; }
+  for (const n of D.nodes){ if (!n.share) continue; const a1 = a0 + n.share / 100 * Math.PI * 2;
+    g.strokeStyle = col(n.id); g.beginPath(); g.arc(cx, cy, r - 11, a0 + .015, a1 - .015); g.stroke(); a0 = a1; }
+  g.fillStyle = css("--text"); g.font = "700 22px Segoe UI, system-ui, sans-serif"; g.textAlign = "center";
+  g.fillText(fmtN(last.ok + last.failed), cx, cy + 4); g.font = "11px Segoe UI, system-ui, sans-serif"; g.fillStyle = css("--mute"); g.fillText("calls total", cx, cy + 20); g.textAlign = "left";
+}
+function roundRect(g, x, y, w, h, r){ r = Math.min(r, h/2, w/2); g.beginPath(); g.moveTo(x+r, y); g.arcTo(x+w, y, x+w, y+h, r); g.arcTo(x+w, y+h, x, y+h, r); g.arcTo(x, y+h, x, y, r); g.arcTo(x, y, x+w, y, r); g.closePath(); }
+function ring(pct, color, size){
+  const r = size/2 - 6, c = 2 * Math.PI * r, off = c * (1 - Math.min(100, pct) / 100);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--line)" stroke-width="8"/>
+  <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 ${size/2} ${size/2})" style="transition:stroke-dashoffset .5s"/>
+  <text x="50%" y="54%" text-anchor="middle" font-size="13" font-weight="700" fill="var(--text)">${Math.round(pct)}%</text></svg>`;
+}
+function spark(id, pts, color){
+  const c = document.getElementById(id); if (!c) return; const [g, w, h] = setupCanvas(c); const v = pts.filter(x => x != null); if (v.length < 2) return;
+  const mx = Math.max(...v) * 1.2 || 1, step = w / (pts.length - 1);
+  g.beginPath(); pts.forEach((p, i) => { const y = h - 2 - (h - 4) * (p || 0) / mx; i ? g.lineTo(i * step, y) : g.moveTo(0, y); });
+  g.strokeStyle = color; g.lineWidth = 1.6; g.stroke(); g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fillStyle = color + "22"; g.fill();
+}
+
+/* ---------- panels ---------- */
+function topo(D){
+  const svg = $("topo"), W = 520, H = 330, cx = W / 2, cy = H / 2 + 6;
+  const lead = D.nodes.find(n => n.lead), others = D.nodes.filter(n => !n.lead);
+  const maxRate = Math.max(1, ...others.map(n => n.rate));
+  let s = `<defs><radialGradient id="lg"><stop offset="0" stop-color="#f5b942" stop-opacity=".35"/><stop offset="1" stop-color="#f5b942" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="${cx}" cy="${cy}" r="90" fill="url(#lg)"/>`;
+  const pos = others.map((n, i) => { const a = -Math.PI / 2 + (i + .5) * 2 * Math.PI / Math.max(others.length, 1) - Math.PI / Math.max(others.length, 1);
+    return [n, cx + Math.cos(a) * 190, cy + Math.sin(a) * 118]; });
+  for (const [n, x, y] of pos){
+    const wdt = 1.5 + 7 * n.rate / maxRate, c = n.alive ? col(n.id) : css("--bad");
+    s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${c}" stroke-opacity="${n.alive ? .55 : .35}" stroke-width="${n.alive ? wdt : 2}" ${n.alive ? "" : 'stroke-dasharray="4 7"'} stroke-linecap="round"/>`;
+    if (n.alive && n.rate > 0){ const dur = Math.max(.35, 2.2 - 1.8 * n.rate / maxRate).toFixed(2);
+      s += `<circle r="4" fill="${c}"><animateMotion dur="${dur}s" repeatCount="indefinite" path="M${cx},${cy} L${x},${y} L${cx},${cy}"/></circle>`; }
+  }
+  for (const [n, x, y] of pos){
+    const c = n.alive ? col(n.id) : css("--bad"), r = 30, circ = 2 * Math.PI * (r + 6), off = circ * (1 - n.util / 100);
+    s += `<g opacity="${n.alive ? 1 : .55}"><circle cx="${x}" cy="${y}" r="${r + 9}" fill="var(--bg2)"/><circle cx="${x}" cy="${y}" r="${r + 6}" fill="none" stroke="var(--line)" stroke-width="5"/>
+    <circle cx="${x}" cy="${y}" r="${r + 6}" fill="none" stroke="${c}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${n.alive ? off : circ}" transform="rotate(-90 ${x} ${y})"/>
+    <circle cx="${x}" cy="${y}" r="${r}" fill="${c}" fill-opacity=".16" stroke="${c}" stroke-opacity=".7"/>
+    <text x="${x}" y="${y - 2}" text-anchor="middle" font-size="14" font-weight="700" fill="var(--text)">${n.id}</text>
+    <text x="${x}" y="${y + 13}" text-anchor="middle" font-size="10" fill="var(--mute)">${n.alive ? Math.round(n.util) + "% load" : "LOST"}</text></g>`;
+  }
+  if (lead) s += `<path d="M${cx-16} ${cy-30} l6 -14 l10 8 l10 -8 l6 14 z" fill="#ffd166" stroke="#7a5200" stroke-width="1.5"/>
+    <rect x="${cx-42}" y="${cy-28}" width="84" height="56" rx="14" fill="#b7791f" stroke="#ffd166" stroke-opacity=".6"/>
+    <text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="15" font-weight="800" fill="#fff7e6">LEAD</text>
+    <text x="${cx}" y="${cy+15}" text-anchor="middle" font-size="11" fill="#ffe2a6">${D.rate.toFixed(1)} calls/s</text>`;
+  if (!others.length) s += `<text x="${cx}" y="${H - 20}" text-anchor="middle" font-size="13" fill="var(--dim)">no workers have joined yet</text>`;
+  svg.innerHTML = s;
+}
+
+function boards(D){
+  const el = $("boards");
+  el.innerHTML = D.nodes.map(n => {
+    const c = n.lead ? PAL[0] : col(n.id), caps = [n.flags & 1 ? "FPU" : "", n.flags & 2 ? "WiFi" : "", n.flags & 4 ? "BLE" : ""].filter(Boolean).join(" · ");
+    const ram = n.ram_kb >= 1024 ? (n.ram_kb/1024).toFixed(1)+" MB" : n.ram_kb + " KB";
+    return `<div class="card bd ${n.alive ? "alive" : "dead"}" style="border-top:3px solid ${c}">
+      <div class="top"><div><div class="name">${nameOf(n)}</div>
+      <div class="meta">${n.clock_mhz} MHz · ${n.cores} core${n.cores>1?"s":""} · ${ram}${caps ? " · " + caps : ""}</div></div>
+      <span class="tag">${n.alive ? "● alive" : "● lost"}</span></div>
+      <div class="ring">${ring(n.alive ? n.util : 0, c, 76)}<div><div class="big">${n.rate.toFixed(1)}<small> calls/s</small></div>
+      <div class="meta">${n.share.toFixed(0)}% of all calls · ${n.inflight} in flight</div></div></div>
+      <div class="kv">
+        <span>Latency last / avg</span><span>${n.ok+n.failed ? fmtUs(n.lat_last)+" / "+fmtUs(n.lat_avg) : "–"}</span>
+        <span>Latency min / max</span><span>${n.ok+n.failed ? fmtUs(n.lat_min)+" / "+fmtUs(n.lat_max) : "–"}</span>
+        <span>Completed / failed</span><span>${fmtN(n.ok)} / <span style="color:${n.failed ? "var(--bad)" : "inherit"}">${fmtN(n.failed)}</span></span>
+        <span>Retries (went quiet)</span><span style="color:${n.retries ? "var(--warn)" : "inherit"}">${n.retries}</span>
+        <span>Queued work</span><span>${n.queued} units</span>
+        <span>Chip ID</span><span style="font-family:ui-monospace,Consolas,monospace">${n.uid.toString(16).toUpperCase().padStart(8,"0")}</span>
+      </div><canvas class="spark" id="sp${n.id}" height="34"></canvas></div>`;
+  }).join("");
+  for (const n of D.nodes) spark("sp" + n.id, (series.lat[n.id] || []).map(p => p[1]), n.lead ? PAL[0] : col(n.id));
+}
+
+function links(D){
+  const kinds = l => l.mtu <= 8 ? "CAN" : l.kbps >= 1000 && l.mtu <= 64 ? "radio / SPI" : "serial / SPI";
+  $("links").innerHTML = D.links.length ? D.links.map(l => {
+    const c = l.load > 70 ? "linear-gradient(90deg,#fbbf24,#f87171)" : "linear-gradient(90deg,#22d3ee,#a78bfa)";
+    return `<div class="lk"><div class="t"><b>Link ${l.i} · ${kinds(l)}</b><span>${l.load.toFixed(1)}% of ${l.kbps >= 1000 ? (l.kbps/1000)+" Mbit/s" : l.kbps+" kbit/s"}</span></div>
+    <div class="meter"><i style="width:${Math.max(l.load, .6)}%;background:${c}"></i></div>
+    <div class="s"><span>${l.fps.toFixed(0)} frames/s</span><span>${fmtN(l.bps)} B/s</span><span>MTU ${l.mtu} B</span>
+    <span>${fmtN(l.tx_frames)} tx · ${fmtN(l.rx_frames)} rx total</span><span style="color:${l.tx_fail ? "var(--warn)" : "inherit"}">${l.tx_fail} send failures</span></div></div>`;
+  }).join("") : '<div class="empty">No links yet</div>';
+}
+
+function feed(){
+  const ic = {JOINED:["#34d399","+"],LOST:["#f87171","×"],RETRY:["#fbbf24","↻"],DONE:["#22d3ee","="],PLACED:["#a78bfa","→"],REFUSED:["#f87171","!"],MODULE_START:["#60a5fa","»"],MODULE_STOP:["#60a5fa","−"],IDCLASH:["#fbbf24","#"],VERSION:["#f87171","v"],ACCEPTED:["#34d399","+"]};
+  const txt = e => { const n = EVN[e.ev] || "EVENT "+e.ev;
+    return n === "JOINED" ? `node <b>${e.a}</b> joined` : n === "LOST" ? `node <b>${e.a}</b> lost: calls move to the others` :
+      n === "RETRY" ? `task ${e.a}: node <b>${e.b}</b> didn't answer, retrying` : n === "DONE" ? `task ${e.a} done on node <b>${e.b}</b>` :
+      n === "PLACED" ? `task ${e.a} placed on node <b>${e.b}</b>` : n === "REFUSED" ? `refused node ${e.a} (code ${e.b})` :
+      n === "MODULE_START" ? `module ${e.a} → node <b>${e.b}</b>` : n === "MODULE_STOP" ? `module ${e.a} taken from node <b>${e.b}</b>` :
+      n === "VERSION" ? `node ${e.a} speaks protocol v${e.b}` : `${n} ${e.a} ${e.b}`; };
+  const list = [...events.values()].sort((a, b) => b.seq - a.seq || b.t_ms - a.t_ms).slice(0, 60);
+  $("feed").innerHTML = list.length ? list.map(e => { const k = EVN[e.ev] || "", [c, s] = ic[k] || ["#8a96b5", "•"];
+    return `<div class="ev"><time>${fmtT(e.t_ms).replace(/^0m /,"")}</time><span class="i" style="background:${c}22;color:${c}">${s}</span><span>${txt(e)}</span></div>`; }).join("")
+    : '<div class="empty">Nothing yet</div>';
+  $("evH").textContent = missed ? `${missed} not shown (snapshots too far apart)` : "";
+}
+
+/* ---------- main loop ---------- */
+function ingest(s){
+  if (last && s.seq === last.seq) return false;
+  if (last && (s.t_ms < last.t_ms)) { hist = []; series.t = []; series.rate = []; series.delay = []; series.lat = {}; events.clear(); lastEvSeq = null; } /* lead restarted */
+  last = s; hist.push(s); while (hist.length > 2 && s.t_ms - hist[0].t_ms > HISTORY_MS + 5000) hist.shift();
+  for (const e of s.events){
+    if (lastEvSeq !== null && d16(e.seq, lastEvSeq) > 0x8000) continue;        /* already seen */
+    if (!events.has(e.seq)) events.set(e.seq, e);
+  }
+  if (s.events.length){
+    const first = s.events[0].seq, newest = s.events[s.events.length - 1].seq;
+    if (lastEvSeq !== null && d16(first, lastEvSeq) > 1 && d16(first, lastEvSeq) < 0x8000) missed += d16(first, lastEvSeq) - 1;
+    lastEvSeq = newest;
+  }
+  while (events.size > 200) events.delete(events.keys().next().value);
+  return true;
+}
+
+function render(fresh){
+  const D = derive(), t = last.t_ms;
+  if (fresh) record(D, t);
+  draw(D, t);
+}
+
+function record(D, t){
+  series.t.push(t); series.rate.push([t, D.rate]); series.delay.push([t, last.ok + last.failed ? last.delay_avg : null]);
+  for (const n of D.nodes) (series.lat[n.id] = series.lat[n.id] || []).push([t, n.ok + n.failed && n.alive ? n.lat_avg : null]);
+  const cut = t - HISTORY_MS - 2000;
+  while (series.t.length && series.t[0] < cut){ series.t.shift(); series.rate.shift(); series.delay.shift(); }
+  for (const k in series.lat) while (series.lat[k].length && series.lat[k][0][0] < cut) series.lat[k].shift();
+}
+
+function draw(D, t){
+  const alive = D.nodes.filter(n => n.alive).length, total = last.ok + last.failed;
+  $("kAlive").innerHTML = `${alive}<small>/ ${D.nodes.length}</small>`;
+  $("kAliveT").textContent = D.nodes.length - alive ? `${D.nodes.length - alive} lost` : "everyone's here";
+  $("kRate").textContent = D.rate.toFixed(1);
+  $("kRateT").textContent = `${fmtN(total)} calls since the lead started`;
+  $("kDelay").textContent = total ? fmtUs(last.delay_avg) : "–";
+  $("kDelayT").textContent = total ? `last ${fmtUs(last.delay_last)} · worst ${fmtUs(last.delay_max)}` : "no calls yet";
+  $("kP95").textContent = D.p50 ? `${fmtUs(D.p50)}` : "–";
+  $("kP95T").textContent = D.p95 ? `p95 ≤ ${fmtUs(D.p95)} · ${D.histTot} attempts` : "no recent attempts";
+  const okp = total ? last.ok / total * 100 : 100;
+  $("kOk").innerHTML = total ? `${okp >= 99.95 ? "100" : okp.toFixed(okp > 99 ? 2 : 1)}<small>%</small>` : "–";
+  $("kOkT").textContent = `${fmtN(last.failed)} failed · ${fmtN(last.retries)} retries`;
+  $("kOkBar").style.width = okp + "%";
+  $("kUtil").innerHTML = `${D.util.toFixed(0)}<small>%</small>`;
+  $("kUtilT").textContent = "average over live workers";
+  $("kUtilBar").style.width = D.util + "%";
+  $("uptime").textContent = "lead up " + fmtT(t);
+  $("subtitle").textContent = `lead = node ${last.lead} · snapshot #${last.seq}${last.has_us ? "" : " · ms clock"}`;
+
+  const lines = [{name:"delay (end to end)", color:"#f5b942", pts:series.delay, width:2.6, fill:true}];
+  for (const n of D.nodes) if (!n.lead && series.lat[n.id]) lines.push({name:"node "+n.id, color:col(n.id), pts:series.lat[n.id], width:1.6, dash:[]});
+  lineChart($("cLat"), lines, v => fmtUs(v));
+  $("latLegend").innerHTML = lines.map(l => `<span><b style="background:${l.color}"></b>${l.name}${l.name.startsWith("node") ? " latency" : ""}</span>`).join("");
+  lineChart($("cRate"), [{color:"#22d3ee", pts:series.rate, fill:true, width:2.2}], v => v.toFixed(v < 10 ? 1 : 0));
+  histChart($("cHist"), D);
+  donut($("cShare"), D);
+  $("shareLegend").innerHTML = D.nodes.filter(n => n.share > 0).map(n => `<span><b style="background:${n.lead ? PAL[0] : col(n.id)}"></b>${n.lead ? "lead" : "node "+n.id} ${n.share.toFixed(0)}%</span>`).join("");
+  topo(D); boards(D); links(D); feed();
+}
+
+function status(cls, text){ const s = $("state"); s.className = "pill " + cls; $("stateText").textContent = text; }
+
+async function tick(){
+  try {
+    const r = await fetch("api/frame", {cache: "no-store"});
+    if (r.status === 204){ status("stale", "waiting for the lead"); return; }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    source = r.headers.get("X-Muster-Source") || source || "board";
+    $("src").textContent = "source: " + source;
+    const s = decode(await r.arrayBuffer());
+    if (ingest(s)){ lastNew = Date.now(); render(true); }
+    const age = Date.now() - lastNew;
+    if (age > 3000) status("stale", `no new data for ${Math.round(age/1000)} s`); else status("live", "live");
+    $("banner").style.display = /demo/i.test(source) ? "block" : "none";
+    $("banner").textContent = "Demo mode: these numbers come from a simulated cluster, not real boards.";
+  } catch (e) {
+    status("off", "offline"); console.warn(e);
+  }
+}
+
+$("theme").onclick = () => { const r = document.documentElement, cur = r.dataset.theme || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  r.dataset.theme = cur === "light" ? "dark" : "light"; try { localStorage.setItem("muster-theme", r.dataset.theme); } catch (e) {} if (last) render(false); };
+try { const t = localStorage.getItem("muster-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+addEventListener("resize", () => last && render(false));
+tick(); setInterval(tick, POLL_MS);
+</script>
+</body>
+</html>

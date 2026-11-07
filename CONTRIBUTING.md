@@ -10,7 +10,9 @@ then the spec for the area you are touching.
   Follow the bring-up order in [`docs/HARDWARE.md`](docs/HARDWARE.md) and open a
   *Hardware report* issue, whether it worked or not.
 * **A new board** in `tools/muster-cli/muster_cli/db/boards.yaml`, backed by its
-  datasheet (cite it in the PR). Never guess a pinout.
+  datasheet (cite it in the PR). Never guess a pinout. Or simpler: flash
+  `firmware/examples/portability` to a board in [`docs/BOARDS.md`](docs/BOARDS.md) and
+  report what it prints.
 * **A failing host test** for a bug you found. That is the best bug report.
 
 ## Setup
@@ -24,7 +26,7 @@ set `MUSTER_HOST_CXX=wsl` so the toolchain tests compile their host round trip t
 
 ## Checks every change must pass
 ```bash
-make -C firmware/test            # strict C99: -Wall -Wextra -Wpedantic -Werror (also link guards + sketch copies)
+make -C firmware/test            # strict C99: -Wall -Wextra -Wpedantic -Werror (also link guards, sketch copies, dashboard page)
 make -C firmware/test cpp        # the same tests as C++11 (Arduino compiles as C++)
 make -C firmware/test avr        # after core changes: ATmega328P flash/RAM, needs avr-gcc
 pytest tools/muster-cli          # toolchain tests
@@ -70,6 +72,8 @@ Intentional limits (at-least-once across boards, hub and spoke, tasks must not c
 * **Generated code** uses the `mg_` / `muster_` prefixes and the fixed-width rules above.
 * **Commits:** `area: what changed`, for example `core: dedupe repeated CALLs`.
 * **New source files** start with the SPDX header used in the existing ones.
+* **The dashboard page** is `tools/muster-cli/muster_cli/dash/index.html`. After editing it,
+  run `python3 tools/muster-cli/muster_cli/dash/embed.py` to regenerate the board's copy.
 * **The `trio` sketch** carries copies of `firmware/src/*.h` (the Arduino IDE only builds
   files in the sketch folder). After changing a header, run `make -C firmware/test sync-copies`.
 
@@ -83,6 +87,8 @@ Intentional limits (at-least-once across boards, hub and spoke, tasks must not c
 | Wiring, pins, electrical | `docs/HARDWARE.md` |
 | Why things are as they are | `docs/DECISIONS.md` (add new decisions at the bottom) |
 | Testing and benchmarks | `docs/TESTING.md` |
+| Telemetry and the dashboard | `docs/TELEMETRY.md` |
+| Which boards work | `docs/BOARDS.md` |
 
 ## Conduct
 This project follows the [Code of Conduct](CODE_OF_CONDUCT.md).

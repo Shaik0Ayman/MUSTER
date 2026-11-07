@@ -179,9 +179,9 @@ function update(s){
   $("k-fail").textContent=s.failed;
   $("k-radio").textContent=s.radio.txfail;
   var conn=$("conn");
-  if(s.alive>=boards.length&&boards.length>1){conn.className="pill ok";conn.innerHTML="<i>✓</i><span>all boards up</span>";}
+  if(s.alive>=boards.length&&boards.length>1){conn.className="pill ok";conn.innerHTML="<i>●</i><span>all boards up</span>";}
   else if(boards.length<=1){conn.className="pill wait";conn.innerHTML="<i>◐</i><span>waiting for workers</span>";}
-  else{conn.className="pill off";conn.innerHTML="<i>✕</i><span>"+(boards.length-s.alive)+" board(s) lost</span>";}
+  else{conn.className="pill off";conn.innerHTML="<i>●</i><span>"+(boards.length-s.alive)+" board(s) lost</span>";}
 
   boards.forEach(function(b){
     var h=hist[b.slot]||(hist[b.slot]={duty:[],busy:[]});
@@ -192,9 +192,9 @@ function update(s){
     r.classList.toggle("lost",!b.alive);
     r.querySelector(".nm").textContent=b.name;
     var st=r.querySelector(".st");
-    if(!b.alive){st.className="pill st off";st.innerHTML="<i>✕</i> lost";}
+    if(!b.alive){st.className="pill st off";st.innerHTML="<i>●</i> lost";}
     else if(!b.lead&&b.age<0){st.className="pill st wait";st.innerHTML="<i>◐</i> joined, no result yet";}
-    else{st.className="pill st ok";st.innerHTML="<i>✓</i> alive";}
+    else{st.className="pill st ok";st.innerHTML="<i>●</i> alive";}
     r.querySelector(".chip").textContent=(CHIPS[b.chip]||"ESP32")+" · node "+b.node+" · "+b.cpu+" MHz";
     r.querySelector(".d").textContent=pct(b.duty)+"%";
     r.querySelector(".meter div").style.width=pct(b.duty)+"%";
@@ -228,7 +228,7 @@ function tick(){
     clearTimeout(to);fails=0;$("banner").classList.remove("on");update(s);
   }).catch(function(){
     clearTimeout(to);fails++;
-    if(fails>=2){$("banner").classList.add("on");$("conn").className="pill off";$("conn").innerHTML="<i>✕</i><span>lead unreachable</span>";}
+    if(fails>=2){$("banner").classList.add("on");$("conn").className="pill off";$("conn").innerHTML="<i>●</i><span>lead unreachable</span>";}
   }).then(function(){setTimeout(tick,POLL);});
 }
 tick();

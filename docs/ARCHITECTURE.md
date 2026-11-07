@@ -101,5 +101,4 @@ does not hold.
 
 ## Planned
 - Hardware bring-up of the CAN and SPI drivers (M4, M5).
-- Telemetry stream from the lead + host dashboard.
 - SPI accelerator links generated from the board DB.

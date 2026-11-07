@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="1200" height="360" role="img" aria-labelledby="t d">
+  <title id="t">The trio demo</title>
+  <desc id="d">An ESP32-C6 lead talks to two ESP32 DevKit workers over ESP-NOW radio, and serves a live dashboard to a phone from its own WiFi access point.</desc>
+  <defs>
+    <symbol id="dev" viewBox="0 0 150 90">
+      <rect x="2" y="2" width="146" height="86" rx="12" fill="currentColor"/>
+      <rect x="2" y="2" width="146" height="86" rx="12" fill="#000" fill-opacity="0.15"/>
+      <rect x="52" y="24" width="46" height="42" rx="5" fill="#0b1020"/>
+      <rect x="60" y="31" width="30" height="28" rx="3" fill="#1f2a44"/>
+      <g fill="#e8ecf5" fill-opacity="0.8">
+        <circle cx="18" cy="13" r="2.6"/><circle cx="32" cy="13" r="2.6"/><circle cx="46" cy="13" r="2.6"/><circle cx="60" cy="13" r="2.6"/><circle cx="74" cy="13" r="2.6"/><circle cx="88" cy="13" r="2.6"/><circle cx="102" cy="13" r="2.6"/><circle cx="116" cy="13" r="2.6"/><circle cx="130" cy="13" r="2.6"/>
+        <circle cx="18" cy="77" r="2.6"/><circle cx="32" cy="77" r="2.6"/><circle cx="46" cy="77" r="2.6"/><circle cx="60" cy="77" r="2.6"/><circle cx="74" cy="77" r="2.6"/><circle cx="88" cy="77" r="2.6"/><circle cx="102" cy="77" r="2.6"/><circle cx="116" cy="77" r="2.6"/><circle cx="130" cy="77" r="2.6"/>
+      </g>
+      <rect x="0" y="34" width="14" height="22" rx="3" fill="#c9d1e3"/>
+    </symbol>
+  </defs>
+  <rect width="1200" height="360" rx="24" fill="#111a30"/>
+
+  <g font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+    <!-- lead -->
+    <use href="#dev" x="470" y="40" width="190" height="114" style="color:#b7791f"/>
+    <path d="M543 36 l8 -20 l14 12 l14 -12 l8 20 z" fill="#ffd166" stroke="#7a5200" stroke-width="2"/>
+    <text x="565" y="180" font-size="19" font-weight="700" fill="#ffe2a6" text-anchor="middle">ESP32-C6 · lead</text>
+    <text x="565" y="202" font-size="14" fill="#8d97b5" text-anchor="middle">places calls · hosts the dashboard</text>
+
+    <!-- radio waves down to the workers -->
+    <g fill="none" stroke="#2dd4bf" stroke-width="4" stroke-linecap="round">
+      <path d="M484 216 q-50 16 -138 34" stroke-dasharray="2 12"/>
+      <path d="M646 216 q50 16 138 34" stroke-dasharray="2 12"/>
+    </g>
+    <text x="430" y="268" font-size="14" fill="#9cf2e4" text-anchor="middle">ESP-NOW</text>
+    <text x="700" y="268" font-size="14" fill="#9cf2e4" text-anchor="middle">ESP-NOW</text>
+
+    <!-- workers with glowing PWM LEDs -->
+    <use href="#dev" x="190" y="232" width="150" height="90" style="color:#0f766e"/>
+    <circle cx="322" cy="254" r="9" fill="#60a5fa"><animate attributeName="fill-opacity" values="0.2;1;0.2" dur="2s" repeatCount="indefinite"/></circle>
+    <text x="265" y="346" font-size="16" fill="#cfd6ea" text-anchor="middle">ESP32 DevKit · worker A</text>
+    <use href="#dev" x="790" y="232" width="150" height="90" style="color:#0f766e"/>
+    <circle cx="922" cy="254" r="9" fill="#60a5fa"><animate attributeName="fill-opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite"/></circle>
+    <text x="865" y="346" font-size="16" fill="#cfd6ea" text-anchor="middle">ESP32 DevKit · worker B</text>
+
+    <!-- phone with dashboard -->
+    <g transform="translate(990 40)">
+      <rect x="0" y="0" width="150" height="270" rx="22" fill="#0b1020" stroke="#475569" stroke-width="3"/>
+      <rect x="12" y="26" width="126" height="222" rx="10" fill="#f8fafc"/>
+      <rect x="55" y="10" width="40" height="6" rx="3" fill="#334155"/>
+      <text x="22" y="48" font-size="12" font-weight="700" fill="#0f172a">muster trio</text>
+      <rect x="22" y="58" width="106" height="44" rx="6" fill="#fde68a"/>
+      <text x="30" y="76" font-size="10" fill="#713f12">Lead</text>
+      <rect x="22" y="108" width="106" height="44" rx="6" fill="#99f6e4"/>
+      <text x="30" y="126" font-size="10" fill="#134e4a">Worker A</text>
+      <rect x="30" y="134" width="70" height="6" rx="3" fill="#14b8a6"/>
+      <rect x="22" y="158" width="106" height="44" rx="6" fill="#99f6e4"/>
+      <text x="30" y="176" font-size="10" fill="#134e4a">Worker B</text>
+      <rect x="30" y="184" width="54" height="6" rx="3" fill="#14b8a6"/>
+      <rect x="22" y="210" width="106" height="28" rx="6" fill="#e2e8f0"/>
+      <text x="30" y="228" font-size="9" fill="#334155">calls/s · ok · lost</text>
+    </g>
+    <path d="M660 90 C800 70 900 70 984 110" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="6 8"/>
+    <text x="826" y="66" font-size="14" fill="#94a3b8" text-anchor="middle">WiFi "muster-trio" → 192.168.4.1</text>
+
+    <!-- left caption -->
+    <text x="40" y="70" font-size="24" font-weight="800" fill="#ffffff">No wires.</text>
+    <text x="40" y="100" font-size="24" font-weight="800" fill="#ffffff">Just power.</text>
+    <text x="40" y="132" font-size="15" fill="#8d97b5">Each answer sets a PWM duty,</text>
+    <text x="40" y="152" font-size="15" fill="#8d97b5">so the LEDs ramp up and down.</text>
+  </g>
+</svg>

@@ -17,9 +17,17 @@
 #define MUSTER_LINK_LOOPBACK_H
 #include "muster.h"
 
+/* Sized for host tests (~135 KB). Override before including to run the bus
+ * inside one small chip, e.g. the portability self-test sketch. */
+#ifndef LB_MAX_NODES
 #define LB_MAX_NODES 8
+#endif
+#ifndef LB_QUEUE
 #define LB_QUEUE     256
+#endif
+#ifndef LB_FRAME
 #define LB_FRAME     64
+#endif
 
 typedef struct { uint8_t src, len, data[LB_FRAME]; } lb_frame;
 
