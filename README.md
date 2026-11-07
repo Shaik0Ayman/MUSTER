@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="#watch-the-demo">Demo</a> ·
   <a href="#what-muster-is">What it is</a> ·
   <a href="#where-to-start">Where to start</a> ·
   <a href="#try-it-on-real-boards">Real boards</a> ·
@@ -20,6 +21,16 @@
   <a href="#faq">FAQ</a> ·
   <a href="#status">Status</a>
 </p>
+
+## Watch the demo
+
+<p align="center">
+  <a href="docs/media/muster-product-demo.mp4"><b>▶ Watch the Muster product demo</b></a> (MP4, 43 MB)
+</p>
+
+A short walkthrough of Muster: what it does, and how the lead hands work to the worker
+boards. The file is [`docs/media/muster-product-demo.mp4`](docs/media/muster-product-demo.mp4);
+GitHub opens it in its file viewer, or you can download it and play it locally.
 
 ## What Muster is
 
@@ -607,6 +618,7 @@ tools/muster-cli/
   muster_cli/               analyse · partition · validate · codegen · pio · wiring · mcp · dash
   muster_cli/db/boards.yaml the only source of pins and board facts
   examples/                 quadruped, quadruped_modules
+docs/media/                 muster-product-demo.mp4: the product demo video
 docs/                       protocol, architecture, links, boards, telemetry, hardware, testing, decisions, roadmap
 ```
 
