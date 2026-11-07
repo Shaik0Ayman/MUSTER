@@ -29,7 +29,7 @@ that was added later. Getting them to work together usually means writing your o
 message formats, deciding by hand which board runs which function, and rewriting a good
 part of the firmware the day you move one of them.
 
-We wanted to stop doing that, so we wrote Muster.
+I wanted to stop doing that, so I wrote Muster.
 
 The idea is simple. One board is the **lead** and the others are **workers**. You write
 ordinary Arduino-style C++ and mark the functions you want to share. Muster works out which
