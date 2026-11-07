@@ -13,6 +13,10 @@ and a port can be "unplugged".
 | `test_framing` | reassembly edge cases, link MTU checks, node table full/recycle, version check |
 | `test_loss` | 5% random frame loss, 300 calls (with `MUSTER_MAX_RETRIES=6`) |
 | `test_modules` | lead-assigned modules (placement, decline, loss, healed ASSIGN) and uid-based IDs with clash resolution |
+| `test_sim_cluster` | the Wokwi demo (`examples/sim_cluster`): pull worker cables, module moves, rejoin |
+| `test_espnow_link` | the ESP-NOW link's ring and packet logic, then a lead with two workers on a simulated lossy broadcast medium (10% loss, node-ID change, a worker leaving) |
+| `test_trio_task` | the trio demo's task: the series matches its closed form, result encoding round-trips, the PWM hook gets the reported duty |
+| `test_uart_link` | the byte-stream link: framing, resync after corruption, a lead with two workers on separate cables, a pulled cable |
 | `test_multilink` | CAN + SPI-like buses: routes, link-priced placement, unplug/replug, broadcasts |
 | `test_spi_frame` | SPI packet framing and CRC |
 | `test_spi_link` | SPI queues, master/slave logic, two boards over the in-memory wire, bit flips, cable pull |

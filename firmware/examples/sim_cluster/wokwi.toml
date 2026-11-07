@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = '.pio/build/sim_cluster/firmware.bin'
+elf = '.pio/build/sim_cluster/firmware.elf'

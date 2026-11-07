@@ -17,13 +17,27 @@ and boards on different protocol versions refuse each other at `JOIN`.
 * Modules and tasks may live in project-local headers next to the sketch; a module
   may be declared early and defined after the generated glue so it can call tasks.
 * Optional `muster_link.set_id` so a CAN link learns an ID that changed after start.
+* `muster_link_uart.h`: a point-to-point link over any byte stream (sync, length, CRC-16;
+  resyncs after corruption) for testing Muster between boards without CAN, for example in
+  simulators. Host-tested only.
+* `firmware/examples/sim_cluster`: a lead and two workers in one simulated ESP32-S3
+  (Wokwi project, LEDs and buttons), with its logic also run as a host test.
+* `muster_link_espnow.h`: Muster over ESP-NOW for ESP32 boards with no CAN transceiver
+  (wireless broadcast, src ID in the packet, lock-free receive ring). The ring and packet
+  logic is host-tested (`test_espnow_link`); the radio glue compiles on Arduino-ESP32 2.0.17
+  and has **not run on hardware**.
+* `firmware/examples/trio`: three-ESP32 demo (ESP32-C6 lead + two DevKit workers). A Fourier-series
+  task runs on the workers, each answer sets a PWM duty on its board, and the lead serves a live
+  per-board dashboard from its own WiFi access point. Includes a per-board self-test sketch and a
+  hardware-free dashboard preview. Task math host-tested (`test_trio_task`). **Not run on hardware;
+  the C6 build is not yet compiled** (needs the pioarduino platform).
 * GPL-3.0-only license, README, CONTRIBUTING, SECURITY, issue and PR templates.
 
 ### Changed
 * **Protocol v3** (incompatible with v2): `JOIN` 14 → 19 bytes, `ACK` gains a `uid`,
   `BEAT` gains `running`/`refused`. See `docs/PROTOCOL.md`.
 * Minimal ATmega328P worker: 8120 → 8854 B flash, 468 → 492 B static RAM.
-* Host tests: 101 → 130 checks. Toolchain tests: 63 → 74.
+* Host tests: 101 → 160 checks. Toolchain tests: 63 → 74.
 
 ### Not yet verified
 * The CAN and SPI drivers and everything built on them have **not run on real

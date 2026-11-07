@@ -113,7 +113,7 @@ DECISIONS 25–27.
 - [x] Core: `uid`-based node IDs with clash detection (`ACK ok=4`), `ASSIGN`,
       module placement and failover, beat-driven reconciliation; compiled out on AVR.
       *(`test_modules.c`: placement, spread, decline, board lost and rejoined, lost
-      ASSIGN healed, same-ID clash, ACK for another uid ignored. 130 host checks,
+      ASSIGN healed, same-ID clash, ACK for another uid ignored. 160 host checks,
       C99 and C++11. Mutation-checked: removing the clash check, the uid filter or
       the beat resend each fails tests.)*
 - [x] AVR budget: minimal worker flash 8120 → 8854 B, static RAM 468 → 492 B (< 600 B).

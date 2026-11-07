@@ -83,3 +83,15 @@ Short records of choices that are easy to second-guess. Add new ones at the bott
     a shared image is its own PlatformIO env with the same `-D` flags as any board, which
     keeps the old projects byte-for-byte what they were and avoids quoting a header name
     through `build_flags`. Module code is what lives in headers (`modules/*.h`).
+29. **ESP-NOW is the link for boards with no CAN.** It is a shared broadcast medium, which is what the
+    core already assumes of a CAN bus (every board hears every frame, the frame header names the
+    destination), so it needed no core change: just a link that prepends the source node ID and
+    queues received frames for `muster_poll()`. Broadcast frames are unacknowledged; the runtime's
+    retries and duplicate cache do the recovering. UART (`muster_link_uart.h`) was the alternative:
+    wired, but point-to-point, so the lead would need one UART per worker, and the ESP32-C6 has too
+    few free ones next to its console. The radio glue is unverified on hardware.
+30. **The trio demo carries per-board analytics inside task results.** Each result includes the
+    board's own vital signs (node, uptime, heap, task time, task count), so the dashboard needs no
+    extra message type and no way to address one board: placement spreads the calls, and the board
+    that ran each one describes itself. A board that gets no work shows no fresh numbers, which is
+    itself visible on the page.

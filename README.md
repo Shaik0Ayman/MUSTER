@@ -16,7 +16,7 @@ decides, live, who runs what. **Workers** join, execute and report.
 
 > [!WARNING]
 > **Status: verified in simulation, not yet on hardware.** The runtime is tested on
-> simulated buses (130 host checks, C99 and C++11) and the generated firmware
+> simulated buses (160 host checks, C99 and C++11) and the generated firmware
 > compiles for every target. The CAN and SPI drivers compile for their boards but
 > **have not been run on real hardware yet**. See [Status](#status) for exactly what
 > is and is not proven.
@@ -26,7 +26,7 @@ decides, live, who runs what. **Workers** join, execute and report.
 ## Contents
 
 [Why Muster](#why-muster) · [How it works](#how-it-works) · [Quick start](#quick-start) ·
-[Walkthrough](#walkthrough-one-program-four-boards) · [Tasks and modules](#tasks-and-modules) ·
+[Walkthrough](#walkthrough-one-program-four-boards) · [Simulate it](#simulate-it-no-hardware) · [Tasks and modules](#tasks-and-modules) ·
 [Command line](#command-line) · [Use it from an AI assistant](#use-it-from-an-ai-assistant-mcp) ·
 [Use the runtime directly](#use-the-runtime-directly-c-api) · [Configuration](#configuration) ·
 [Guarantees and limits](#guarantees-and-limits) · [Supported boards](#supported-boards) ·
@@ -210,6 +210,15 @@ the lead re-places the module on another; plug it back and it rejoins.
 > of the tasks and modules any of them was given. The validator warns when that
 > widens a board's set. The lead decides at run time what each board actually does.
 
+## Simulate it (no hardware)
+[`firmware/examples/sim_cluster`](firmware/examples/sim_cluster) runs a lead and two
+workers inside **one** simulated ESP32-S3 ([Wokwi](https://wokwi.com): LEDs show each
+node's state, two buttons pull and replug the workers' cables). Pull the board running a
+module and watch the lead move it. This exercises the real runtime on the target CPU,
+**not** the CAN hardware: Wokwi runs one firmware per project and only partially
+implements the ESP32-S3's CAN controller, so two ESP32s talking CAN cannot be simulated
+there. The same logic runs as a host test (`test_sim_cluster`).
+
 ## Tasks and modules
 
 |  | **Task** | **Module** |
@@ -389,7 +398,7 @@ datasheet-backed entry there (never guess a pinout), then see
 | M8 Telemetry and dashboard | ⬜ not built |
 | M7 Local LLM evaluation | superseded by MCP (decision 21) |
 
-**Measured:** 130 host checks pass in C99 and C++11 (failover, duplicate suppression,
+**Measured:** 160 host checks pass in C99 and C++11 (failover, duplicate suppression,
 5 % frame loss, CAN + SPI routing, SPI bit-flip recovery, modules, ID clashes);
 74 toolchain tests; a minimal ATmega328P worker is **8.9 KB flash and 492 B static
 RAM** (`make -C firmware/test avr`). **Not measured yet:** real bus latency, bus
@@ -401,7 +410,7 @@ boards briefly share an ID. Full acceptance criteria: [`docs/ROADMAP.md`](docs/R
 ```text
 firmware/
   src/muster.h              the whole runtime: one C99 header
-  src/muster_link_*.h       transports: loopback (tests), twai, mcp2515, spi
+  src/muster_link_*.h       transports: loopback (tests), twai, mcp2515, spi, uart (any byte stream), espnow (ESP32 radio, no CAN needed)
   test/                     host tests, simulated buses, `make` targets
   examples/                 PlatformIO projects: lead_esp32, worker_esp32, worker_nano
 tools/muster-cli/
