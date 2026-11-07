@@ -652,9 +652,9 @@ is a plain description, not legal advice.)
 
 ## Who made this
 
-Muster was written by Shaik Ayman Hameed Baig, Abhinav Senthil and Lahari, in the
-Department of Electronics and Communication Engineering at SRMIST. It started as our
+Muster was written by Shaik Ayman Hameed Baig, in the
+Department of Electronics and Communication Engineering at SRMIST. It started as my
 project for *21ECC301P: Microprocessor, Microcontroller and Interfacing Techniques* and
 grew from there.
 
-If Muster helped your boards get along, a star on GitHub would make our day.
+If Muster helped your boards get along, a star on GitHub would make my day.
